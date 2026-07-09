@@ -1,0 +1,30 @@
+{
+  "info": {
+    "_postman_id": "16c9f770-1f5a-4fc9-b4ca-73322dd795cf",
+    "name": "qq",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "20278552"
+  },
+  "item": [
+    {
+      "name": "http://arch.homework/health/",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "http://arch.homework/health/",
+          "protocol": "http",
+          "host": [
+            "arch",
+            "homework"
+          ],
+          "path": [
+            "health",
+            ""
+          ]
+        }
+      },
+      "response": []
+    }
+  ]
+}
