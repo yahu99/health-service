@@ -1,17 +1,24 @@
 {
   "name": "health-service",
   "version": "1.0.0",
-  "description": "",
+  "description": "RESTful user service for the OTUS microservice architecture course",
   "license": "ISC",
   "author": "",
+  "engines": {
+    "node": ">=20"
+  },
   "type": "commonjs",
-  "main": "index.js",
+  "main": "src/index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node src/index.js"
+    "check": "node --check src/*.js && node --check src/routes/*.js",
+    "migrate": "node src/migrate.js",
+    "start": "node src/index.js",
+    "test": "npm run check"
   },
   "dependencies": {
+    "@koa/bodyparser": "^6.0.0",
     "@koa/router": "^15.6.0",
-    "koa": "^3.2.1"
+    "koa": "^3.2.1",
+    "pg": "^8.16.3"
   }
 }

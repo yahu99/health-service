@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+
+metadata:
+  name: health-service-config
+  namespace: yahu
+  labels:
+    app: health-service
+
+data:
+  PORT: "8000"
+
+  DB_HOST: "users-db-postgresql"
+  DB_PORT: "5432"
+  DB_NAME: "users"
+
+  DB_POOL_SIZE: "10"
+  DB_CONNECTION_TIMEOUT_MS: "3000"
+  DB_SSL: "false"

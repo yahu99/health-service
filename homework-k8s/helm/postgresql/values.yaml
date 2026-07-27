@@ -1,0 +1,18 @@
+architecture: standalone
+
+fullnameOverride: users-db-postgresql
+
+auth:
+  enablePostgresUser: true
+  username: users
+  database: users
+  existingSecret: users-db-credentials
+
+  secretKeys:
+    adminPasswordKey: postgres-password
+    userPasswordKey: password
+
+primary:
+  persistence:
+    enabled: true
+    size: 1Gi

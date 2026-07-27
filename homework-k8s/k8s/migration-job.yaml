@@ -1,26 +1,33 @@
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: batch/v1
+kind: Job
+
 metadata:
-  name: health-service
+  name: health-service-migration
   namespace: yahu
   labels:
     app: health-service
+    component: migration
 
 spec:
-  replicas: 2
-  selector:
-    matchLabels:
-      app: health-service
+  backoffLimit: 3
+
   template:
     metadata:
       labels:
         app: health-service
+        component: migration
+
     spec:
+      restartPolicy: Never
+
       containers:
-        - name: health-service
+        - name: migration
           image: yahurt/health-service:2.0.1
-          ports:
-            - containerPort: 8000
+          command:
+            - npm
+            - run
+            - migrate
+
           envFrom:
             - configMapRef:
                 name: health-service-config
@@ -37,16 +44,3 @@ spec:
                 secretKeyRef:
                   name: users-db-credentials
                   key: password
-
-          livenessProbe:
-            httpGet:
-              path: /health/live
-              port: 8000
-            initialDelaySeconds: 10
-            periodSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /health/ready
-              port: 8000
-            initialDelaySeconds: 5
-            periodSeconds: 5
