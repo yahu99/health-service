@@ -22,7 +22,7 @@ spec:
 
       containers:
         - name: migration
-          image: yahurt/health-service:2.0.1
+          image: yahurt/health-service:3.0.0
           command:
             - npm
             - run

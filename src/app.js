@@ -1,9 +1,13 @@
 const Koa = require("koa");
 const { bodyParser } = require("@koa/bodyparser");
+const { metricsMiddleware } = require("./metrics");
 const healthRouter = require("./routes/health");
+const metricsRouter = require("./routes/metrics");
 const usersRouter = require("./routes/users");
 
 const app = new Koa();
+
+app.use(metricsMiddleware);
 
 app.use(async (ctx, next) => {
     try {
@@ -45,6 +49,8 @@ app.use(
         jsonLimit: "1mb",
     }),
 );
+app.use(metricsRouter.routes());
+app.use(metricsRouter.allowedMethods());
 app.use(healthRouter.routes());
 app.use(healthRouter.allowedMethods());
 app.use(usersRouter.routes());
