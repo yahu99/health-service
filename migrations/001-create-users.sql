@@ -1,0 +1,8 @@
+CREATE TABLE IF NOT EXISTS users (
+    id BIGSERIAL PRIMARY KEY,
+    username VARCHAR(256) NOT NULL UNIQUE,
+    first_name VARCHAR(256) NOT NULL,
+    last_name VARCHAR(256) NOT NULL,
+    email VARCHAR(320) NOT NULL UNIQUE,
+    phone VARCHAR(32)
+);

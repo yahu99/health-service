@@ -1,0 +1,38 @@
+grafana:
+  enabled: true
+
+  persistence:
+    enabled: true
+    size: 1Gi
+
+prometheus:
+  enabled: true
+
+  prometheusSpec:
+    retention: 1d
+    scrapeInterval: 15s
+    evaluationInterval: 15s
+
+    serviceMonitorNamespaceSelector: {}
+    serviceMonitorSelectorNilUsesHelmValues: true
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 2Gi
+
+alertmanager:
+  enabled: true
+
+kubeEtcd:
+  enabled: false
+
+kubeControllerManager:
+  enabled: false
+
+kubeScheduler:
+  enabled: false

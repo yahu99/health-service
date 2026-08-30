@@ -1,0 +1,104 @@
+const Koa = require("koa");
+const { bodyParser } = require("@koa/bodyparser");
+const logger = require("./logger");
+const { metricsMiddleware } = require("./metrics");
+const healthRouter = require("./routes/health");
+const metricsRouter = require("./routes/metrics");
+const usersRouter = require("./routes/users");
+
+const app = new Koa();
+
+app.proxy = process.env.TRUST_PROXY === "true";
+
+app.use(metricsMiddleware);
+
+app.use(async (ctx, next) => {
+    const startedAt = process.hrtime.bigint();
+
+    await next();
+
+    const durationMilliseconds =
+        Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+
+    logger.info(
+        {
+            event: "http_request_completed",
+            method: ctx.method,
+            path: ctx.path,
+            ip: ctx.ip,
+            status_code: ctx.status,
+            duration_ms: Number(durationMilliseconds.toFixed(3)),
+        },
+        "HTTP request completed",
+    );
+});
+
+app.use(async (ctx, next) => {
+    try {
+        await next();
+    } catch (error) {
+        const isUniqueViolation = error.code === "23505";
+
+        ctx.status = isUniqueViolation ? 409 : error.status || 500;
+        ctx.body = {
+            code: ctx.status,
+            message: isUniqueViolation
+                ? "A user with this username or email already exists"
+                : ctx.status === 500
+                  ? "Internal server error"
+                  : error.message,
+        };
+
+        if (ctx.status === 400) {
+            logger.warn(
+                {
+                    event: "validation_failed",
+                    method: ctx.method,
+                    path: ctx.path,
+                    ip: ctx.ip,
+                    validation_error: error.message,
+                },
+                "Request validation failed",
+            );
+        } else if (ctx.status >= 500) {
+            logger.error(
+                {
+                    event: error.code
+                        ? "database_error"
+                        : "application_error",
+                    method: ctx.method,
+                    path: ctx.path,
+                    error,
+                },
+                "Request processing failed",
+            );
+        }
+    }
+});
+
+app.use(async (ctx, next) => {
+    await next();
+
+    if (ctx.status === 404 && !ctx.body) {
+        ctx.body = {
+            code: 404,
+            message: "Resource not found",
+        };
+        ctx.status = 404;
+    }
+});
+
+app.use(
+    bodyParser({
+        enableTypes: ["json"],
+        jsonLimit: "1mb",
+    }),
+);
+app.use(metricsRouter.routes());
+app.use(metricsRouter.allowedMethods());
+app.use(healthRouter.routes());
+app.use(healthRouter.allowedMethods());
+app.use(usersRouter.routes());
+app.use(usersRouter.allowedMethods());
+
+module.exports = app;
