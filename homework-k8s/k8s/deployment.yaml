@@ -18,7 +18,7 @@ spec:
     spec:
       containers:
         - name: health-service
-          image: yahurt/health-service:3.0.0
+          image: yahurt/health-service:4.0.0
           ports:
             - containerPort: 8000
           envFrom:

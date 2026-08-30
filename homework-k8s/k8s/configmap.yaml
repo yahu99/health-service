@@ -9,6 +9,9 @@ metadata:
 
 data:
   PORT: "8000"
+  SERVICE_NAME: "health-service"
+  LOG_LEVEL: "info"
+  TRUST_PROXY: "true"
 
   DB_HOST: "users-db-postgresql"
   DB_PORT: "5432"

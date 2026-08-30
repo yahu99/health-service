@@ -1,5 +1,6 @@
 const Router = require("@koa/router");
 const db = require("../db");
+const logger = require("../logger");
 
 const router = new Router();
 
@@ -19,7 +20,13 @@ router.get("/health/ready", async (ctx) => {
             status: "OK",
         };
     } catch (error) {
-        console.error("PostgreSQL readiness check failed", error.message);
+        logger.error(
+            {
+                event: "database_readiness_check_failed",
+                error,
+            },
+            "PostgreSQL readiness check failed",
+        );
         ctx.status = 503;
         ctx.body = {
             status: "NOT_READY",

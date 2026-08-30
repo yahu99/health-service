@@ -1,10 +1,17 @@
 const { Pool } = require("pg");
 const config = require("./config");
+const logger = require("./logger");
 
 const pool = new Pool(config.database);
 
 pool.on("error", (error) => {
-    console.error("Unexpected PostgreSQL pool error", error);
+    logger.error(
+        {
+            event: "database_pool_error",
+            error,
+        },
+        "Unexpected PostgreSQL pool error",
+    );
 });
 
 module.exports = {
