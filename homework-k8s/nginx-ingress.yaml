@@ -11,3 +11,18 @@ controller:
 
   service:
     type: NodePort
+
+  metrics:
+    enabled: true
+
+    service:
+      enabled: true
+
+    serviceMonitor:
+      enabled: true
+
+      additionalLabels:
+        release: monitoring
+
+      scrapeInterval: 15s
+      scrapeTimeout: 10s

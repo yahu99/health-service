@@ -1,5 +1,6 @@
 const Router = require("@koa/router");
 const db = require("../db");
+const logger = require("../logger");
 
 const router = new Router({
     prefix: "/user",
@@ -132,6 +133,13 @@ router.post("/", async (ctx) => {
     ctx.status = 201;
     ctx.set("Location", `/user/${user.id}`);
     ctx.body = user;
+    logger.info(
+        {
+            event: "user_created",
+            user_id: user.id,
+        },
+        "User created",
+    );
 });
 
 router.get("/:userId", async (ctx) => {
@@ -149,7 +157,15 @@ router.get("/:userId", async (ctx) => {
         ctx.throw(404, "User not found");
     }
 
-    ctx.body = serializeUser(result.rows[0]);
+    const user = serializeUser(result.rows[0]);
+    ctx.body = user;
+    logger.info(
+        {
+            event: "user_retrieved",
+            user_id: user.id,
+        },
+        "User retrieved",
+    );
 });
 
 router.put("/:userId", async (ctx) => {
@@ -190,7 +206,15 @@ router.put("/:userId", async (ctx) => {
         ctx.throw(404, "User not found");
     }
 
-    ctx.body = serializeUser(result.rows[0]);
+    const user = serializeUser(result.rows[0]);
+    ctx.body = user;
+    logger.info(
+        {
+            event: "user_updated",
+            user_id: user.id,
+        },
+        "User updated",
+    );
 });
 
 router.delete("/:userId", async (ctx) => {
@@ -209,6 +233,13 @@ router.delete("/:userId", async (ctx) => {
     }
 
     ctx.status = 204;
+    logger.info(
+        {
+            event: "user_deleted",
+            user_id: userId,
+        },
+        "User deleted",
+    );
 });
 
 module.exports = router;

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Service
+
+metadata:
+  name: elasticsearch-headless
+  namespace: yahu
+  labels:
+    app: elasticsearch
+
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+
+  selector:
+    app: elasticsearch
+
+  ports:
+    - name: http
+      port: 9200
+      targetPort: http
+
+    - name: transport
+      port: 9300
+      targetPort: transport
