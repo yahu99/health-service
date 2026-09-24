@@ -13,6 +13,6 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: health-service
+                name: health-auth-bff
                 port:
                   number: 80

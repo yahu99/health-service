@@ -1,0 +1,392 @@
+{
+  "info": {
+    "_postman_id": "4fbeb025-a580-4673-9ab8-44630f0e830e",
+    "name": "Authentication and BFF",
+    "description": "Authentication, profile update and profile ownership scenario.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.info.requestName === '01 - Register user 1') {",
+          "    const runId = pm.variables.replaceIn('{{$randomUUID}}');",
+          "    pm.collectionVariables.set('runId', runId);",
+          "    pm.collectionVariables.set('user1Username', `user1-${runId}`);",
+          "    pm.collectionVariables.set('user1Password', `Password!-${runId}-1`);",
+          "    pm.collectionVariables.set('user1Email', `user1-${runId}@example.com`);",
+          "    pm.collectionVariables.set('user2Username', `user2-${runId}`);",
+          "    pm.collectionVariables.set('user2Password', `Password!-${runId}-2`);",
+          "    pm.collectionVariables.set('user2Email', `user2-${runId}@example.com`);",
+          "    pm.collectionVariables.set('updatedFirstName', `Updated-${runId.slice(0, 8)}`);",
+          "}",
+          "console.log(`\\n>>> REQUEST ${pm.request.method} ${pm.variables.replaceIn(pm.request.url.toString())}`);",
+          "if (pm.request.body && pm.request.body.mode === 'raw') {",
+          "    console.log(`>>> REQUEST BODY ${pm.variables.replaceIn(pm.request.body.raw)}`);",
+          "}"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log(`<<< RESPONSE ${pm.response.code} ${pm.response.status}`);",
+          "console.log(`<<< RESPONSE BODY ${pm.response.text() || '<empty>'}`);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Register user 1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('user 1 is registered', () => pm.response.to.have.status(201));",
+              "const user = pm.response.json();",
+              "pm.expect(user.id).to.be.a('number');",
+              "pm.expect(user.username).to.eql(pm.collectionVariables.get('user1Username'));",
+              "pm.expect(user).not.to.have.property('password');",
+              "pm.collectionVariables.set('user1Id', String(user.id));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user1Username}}\",\n  \"password\": \"{{user1Password}}\",\n  \"firstName\": \"Alice\",\n  \"lastName\": \"Random\",\n  \"email\": \"{{user1Email}}\",\n  \"phone\": \"+995555000001\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "register"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02 - Anonymous cannot read user 1 profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('anonymous read is rejected', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03 - Anonymous cannot update user 1 profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('anonymous update is rejected', () => pm.response.to.have.status(401));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Unauthorized\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "04 - Login user 1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('user 1 logs in', () => pm.response.to.have.status(200));",
+              "const session = pm.response.json();",
+              "pm.expect(session.userId).to.eql(Number(pm.collectionVariables.get('user1Id')));",
+              "pm.expect(session.expiresAt).to.be.a('string');",
+              "pm.expect(pm.response.headers.get('Set-Cookie')).to.include('session_id=');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user1Username}}\",\n  \"password\": \"{{user1Password}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05 - Update user 1 profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('owner can update profile', () => pm.response.to.have.status(200));",
+              "const user = pm.response.json();",
+              "pm.expect(user.firstName).to.eql(pm.collectionVariables.get('updatedFirstName'));",
+              "pm.expect(user.phone).to.eql('+995555999999');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"{{updatedFirstName}}\",\n  \"phone\": \"+995555999999\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "06 - Verify user 1 profile changed",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('changed profile is returned', () => pm.response.to.have.status(200));",
+              "const user = pm.response.json();",
+              "pm.expect(user.id).to.eql(Number(pm.collectionVariables.get('user1Id')));",
+              "pm.expect(user.firstName).to.eql(pm.collectionVariables.get('updatedFirstName'));",
+              "pm.expect(user.phone).to.eql('+995555999999');"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "07 - Logout user 1",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('user 1 logs out', () => pm.response.to.have.status(204));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/auth/logout",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "logout"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "08 - Register user 2",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('user 2 is registered', () => pm.response.to.have.status(201));",
+              "const user = pm.response.json();",
+              "pm.expect(user.id).to.be.a('number');",
+              "pm.expect(user.username).to.eql(pm.collectionVariables.get('user2Username'));",
+              "pm.collectionVariables.set('user2Id', String(user.id));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user2Username}}\",\n  \"password\": \"{{user2Password}}\",\n  \"firstName\": \"Bob\",\n  \"lastName\": \"Random\",\n  \"email\": \"{{user2Email}}\",\n  \"phone\": \"+995555000002\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "register"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "09 - Login user 2",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('user 2 logs in', () => pm.response.to.have.status(200));",
+              "pm.expect(pm.response.json().userId).to.eql(Number(pm.collectionVariables.get('user2Id')));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{user2Username}}\",\n  \"password\": \"{{user2Password}}\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": ["{{baseUrl}}"],
+          "path": ["auth", "login"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10 - User 2 cannot read user 1 profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cross-user read is forbidden', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "11 - User 2 cannot update user 1 profile",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('cross-user update is forbidden', () => pm.response.to.have.status(403));"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "PUT",
+        "header": [
+          { "key": "Content-Type", "value": "application/json" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"firstName\": \"Hacked\"\n}",
+          "options": { "raw": { "language": "json" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/profile/{{user1Id}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["profile", "{{user1Id}}"]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    { "key": "baseUrl", "value": "http://arch.homework", "type": "string" },
+    { "key": "runId", "value": "" },
+    { "key": "user1Username", "value": "" },
+    { "key": "user1Password", "value": "" },
+    { "key": "user1Email", "value": "" },
+    { "key": "user1Id", "value": "" },
+    { "key": "user2Username", "value": "" },
+    { "key": "user2Password", "value": "" },
+    { "key": "user2Email", "value": "" },
+    { "key": "user2Id", "value": "" },
+    { "key": "updatedFirstName", "value": "" }
+  ]
+}

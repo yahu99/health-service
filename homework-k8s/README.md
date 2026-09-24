@@ -1,155 +1,228 @@
-# Централизованное логирование (EFK)
+# Аутентификация и BFF
 
-CRUD-сервис (Node.js/Koa) со структурными логами (pino), сбор в Kubernetes через
-Elasticsearch + Fluent Bit + Kibana. Namespace — `yahu`.
+Безопасный сценарий регистрации, входа, чтения и изменения пользовательского
+профиля. Namespace установки — **`yahu`**.
+
+![Архитектура Auth BFF](docs/bff.jpg)
+
+## Архитектура
+
+Публичной точкой входа является NGINX Ingress с доменом `arch.homework`. Все
+запросы направляются в Auth+BFF. Существующий Profile Service остаётся внутренним
+`ClusterIP` и не публикуется через Ingress.
+
+| Компонент | Ответственность |
+|---|---|
+| NGINX Ingress | публичная маршрутизация `arch.homework` в Auth+BFF |
+| Auth+BFF | регистрация, login/logout, сессии, авторизация и вызовы Profile Service |
+| Profile Service | создание, чтение и изменение профилей |
+| PostgreSQL | `users`, `auth_credentials`, `auth_sessions` |
+
+### Регистрация
+
+1. Клиент вызывает `POST /auth/register`.
+2. Auth+BFF хэширует пароль с помощью `scrypt` и уникальной соли.
+3. Auth+BFF создаёт профиль через внутренний `POST /user` Profile Service.
+4. Полученный `userId` связывается с credentials.
+5. Если credentials сохранить не удалось, BFF выполняет компенсирующий внутренний
+   `DELETE /user/{userId}`.
+
+### Сессия и доступ к профилю
+
+После login клиент получает случайный session token в cookie с флагами `HttpOnly`
+и `SameSite=Lax`. В базе хранится только SHA-256 token. BFF получает `userId` из
+сессии и сравнивает его с `userId` профиля:
+
+- нет cookie, сессия неизвестна или истекла — `401 Unauthorized`;
+- пользователь запрашивает чужой профиль — `403 Forbidden`;
+- владелец профиля — запрос передаётся во внутренний Profile Service.
+
+## Публичное API
+
+| Метод | URL | Назначение |
+|---|---|---|
+| `POST` | `/auth/register` | регистрация пользователя |
+| `POST` | `/auth/login` | вход и создание сессии |
+| `POST` | `/auth/logout` | отзыв сессии и очистка cookie |
+| `GET` | `/profile/{userId}` | чтение собственного профиля |
+| `PUT` | `/profile/{userId}` | изменение собственного профиля |
+| `GET` | `/health/live` | liveness probe Auth+BFF |
+| `GET` | `/health/ready` | проверка БД и Profile Service |
+
+Внутренние маршруты `/user/*` Profile Service через Ingress недоступны.
 
 ## Требования
 
-Docker, kubectl, Helm 3, Minikube (EFK не помещается в дефолтные 4 ГБ):
+- Docker;
+- kubectl;
+- Helm 3;
+- Minikube с 8 ГБ памяти и 4 CPU;
+- Newman для запуска Postman-тестов.
 
 ```bash
 minikube start --memory=8192 --cpus=4
+kubectl config use-context minikube
 ```
 
-## Установка
+## Сборка Auth+BFF
+
+Готовые манифесты используют `yahurt/health-auth-bff:1.0.0`:
 
 ```bash
-# 1. namespace
+docker build \
+  -t yahurt/health-auth-bff:1.0.0 \
+  homework-k8s/auth-bff
+```
+
+Для удалённого Kubernetes:
+
+```bash
+docker push yahurt/health-auth-bff:1.0.0
+```
+
+## Установка NGINX Ingress
+
+Отдельный API Gateway не используется: его роль выполняет `ingress-nginx`.
+
+```bash
 kubectl create namespace yahu --dry-run=client -o yaml | kubectl apply -f -
 
-# 2. PostgreSQL
+helm upgrade --install nginx-ingress ingress-nginx \
+  --repo https://kubernetes.github.io/ingress-nginx \
+  --namespace yahu \
+  --values homework-k8s/nginx-ingress.yaml \
+  --wait
+```
+
+## Установка приложения
+
+Все компоненты устанавливаются в namespace `yahu`. Команды выполняются из корня
+репозитория `health-service`.
+
+```bash
+# Namespace и credentials существующего PostgreSQL
+kubectl create namespace yahu --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f homework-k8s/k8s/secret.yaml
+
+# PostgreSQL
 helm upgrade --install users-db \
   oci://registry-1.docker.io/bitnamicharts/postgresql \
-  --version 18.8.0 --namespace yahu \
-  --values homework-k8s/helm/postgresql/values.yaml --wait
+  --version 18.8.0 \
+  --namespace yahu \
+  --values homework-k8s/helm/postgresql/values.yaml \
+  --wait
 
-# 3. миграция
+# Profile Service: конфигурация и миграция
 kubectl apply -f homework-k8s/k8s/configmap.yaml
 kubectl delete job health-service-migration -n yahu --ignore-not-found
 kubectl apply -f homework-k8s/k8s/migration-job.yaml
-kubectl wait --for=condition=complete job/health-service-migration -n yahu --timeout=180s
+kubectl wait --for=condition=complete \
+  job/health-service-migration -n yahu --timeout=180s
 
-# 4. приложение
-kubectl apply -f homework-k8s/k8s/deployment.yaml -f homework-k8s/k8s/service.yaml -f homework-k8s/k8s/ingress.yaml
-kubectl rollout status deployment/health-service -n yahu --timeout=180s
+# Profile Service без публичного Ingress
+kubectl apply \
+  -f homework-k8s/k8s/deployment.yaml \
+  -f homework-k8s/k8s/service.yaml
+kubectl rollout status \
+  deployment/health-service -n yahu --timeout=180s
 
-# 5. Elasticsearch
-kubectl apply -f homework-k8s/logging/elasticsearch-headless-service.yaml \
-  -f homework-k8s/logging/elasticsearch-service.yaml \
-  -f homework-k8s/logging/elasticsearch-statefulset.yaml
-kubectl rollout status statefulset/elasticsearch -n yahu --timeout=300s
+# Auth+BFF: конфигурация и миграция в тот же PostgreSQL
+kubectl apply -f homework-k8s/k8s/auth-bff-configmap.yaml
+kubectl delete job health-auth-bff-migration -n yahu --ignore-not-found
+kubectl apply -f homework-k8s/k8s/auth-bff-migration-job.yaml
+kubectl wait --for=condition=complete \
+  job/health-auth-bff-migration -n yahu --timeout=180s
 
-# 6. Kibana
-kubectl apply -f homework-k8s/logging/kibana.yaml
-kubectl rollout status deployment/kibana -n yahu --timeout=300s
-
-# 7. Fluent Bit
-kubectl apply -f homework-k8s/logging/fluent-bit.yaml
-kubectl rollout status daemonset/fluent-bit -n yahu --timeout=120s
+# Auth+BFF и публичный Ingress
+kubectl apply \
+  -f homework-k8s/k8s/auth-bff-deployment.yaml \
+  -f homework-k8s/k8s/auth-bff-service.yaml \
+  -f homework-k8s/k8s/ingress.yaml
+kubectl rollout status \
+  deployment/health-auth-bff -n yahu --timeout=180s
 ```
 
-Проверка: `kubectl get pods,svc,pvc -n yahu`
-
-## Манифесты
-
-```
-k8s/          secret, configmap, migration-job, deployment, service, ingress (образ 4.0.0)
-helm/postgresql/values.yaml
-logging/
-  elasticsearch-headless-service.yaml   Headless Service — DNS-имена узлов для StatefulSet
-  elasticsearch-service.yaml            ClusterIP elasticsearch:9200 для Kibana и Fluent Bit
-  elasticsearch-statefulset.yaml        1 реплика, PVC 5Gi, single-node, heap 512m
-  kibana.yaml                           Deployment + NodePort 30601
-  fluent-bit.yaml                       RBAC + ConfigMap + DaemonSet
-```
-
-Fluent Bit — DaemonSet, читает `/var/log/containers/*.log` со всех подов ноды,
-парсит Docker-формат, добавляет метаданные Kubernetes, фильтрует по метке
-`app=health-service`, шлёт в индекс `fluent-bit-logs-YYYY.MM.DD`.
-Встраивать его в под приложения не нужно.
-
-## Что логируется
-
-| Событие | Уровень | `event` |
-|---|---|---|
-| Старт/остановка приложения | INFO | `application_started/stopping/stopped` |
-| HTTP-запрос (метод, путь, IP, статус, ms) | INFO | `http_request_completed` |
-| CRUD (с `user_id`) | INFO | `user_created/retrieved/updated/deleted` |
-| Ошибка валидации | WARN | `validation_failed` |
-| Ошибка БД/приложения | ERROR | `database_readiness_check_failed`, `database_pool_error` |
-| Job миграции | INFO | `migration_started/completed/failed` |
-
-Пароли маскируются (`[REDACTED]`).
-
-## Kibana
+Проверка:
 
 ```bash
-minikube service kibana --namespace yahu   # терминал держать открытым
+kubectl get pods,services,ingress,jobs -n yahu
+kubectl logs job/health-auth-bff-migration -n yahu
 ```
 
-Data View: Stack Management → Data Views → `fluent-bit-logs-*`, time field `@timestamp`.
+### Локальный доступ к Ingress в Minikube
 
-Discover (KQL), колонки `level, event, message, kubernetes.pod_name`:
-
-```
-service : "health-service"
-level : "ERROR"
-level : "WARN"
-event : "user_created" and user_id : 42
-kubernetes.pod_name : *migration*
-```
-
-Визуализация: Lens → Bar vertical stacked, X `@timestamp`, Y Count, breakdown `level.keyword`.
-
-## Генерация логов
+Для Minikube с Docker driver на macOS удобно перенаправить порт Ingress Controller:
 
 ```bash
-kubectl port-forward -n yahu svc/health-service 8080:80
+kubectl port-forward \
+  -n yahu \
+  service/nginx-ingress-nginx-controller \
+  8081:80
 ```
+
+В `/etc/hosts` должна быть запись:
+
+```text
+127.0.0.1 arch.homework
+```
+
+Проверка маршрута:
 
 ```bash
-BASE=http://127.0.0.1:8080
-resp=$(curl -s -X POST $BASE/user/ -H 'Content-Type: application/json' -d '{"username":"demo","firstName":"De","lastName":"Mo","email":"demo@example.com","phone":"+995555010203"}')
-uid=$(echo "$resp" | sed 's/.*"id":\([0-9]*\).*/\1/')
-curl -s $BASE/user/$uid ; echo
-curl -s -X PUT $BASE/user/$uid -H 'Content-Type: application/json' -d '{"phone":"+995555999999"}' ; echo
-curl -s -X DELETE $BASE/user/$uid ; echo
-curl -s -X POST $BASE/user/ -H 'Content-Type: application/json' -d '{"username":"bad","firstName":"B","lastName":"B","email":"not-an-email"}' ; echo
-curl -s $BASE/user/not-a-number ; echo
+curl http://arch.homework:8081/health/ready
 ```
 
-ERROR (БД недоступна, PVC сохраняется):
+## Postman и Newman
+
+Коллекция: [`postman/auth-bff.postman_collection.json`](postman/auth-bff.postman_collection.json).
+
+Она выполняет обязательный сценарий:
+
+1. регистрирует пользователя №1 со случайными username, email и паролем;
+2. проверяет запрет чтения и изменения профиля без login (`401`);
+3. выполняет login пользователя №1;
+4. изменяет профиль и проверяет сохранённые изменения;
+5. выполняет logout;
+6. регистрирует и авторизует пользователя №2;
+7. проверяет запрет чтения и изменения профиля №1 пользователем №2 (`403`).
+
+Начальное значение `{{baseUrl}}` в коллекции — `http://arch.homework`. При каждом
+запуске генерируется новый UUID. Collection-level scripts печатают метод, URL, тело
+запроса, HTTP-статус и тело ответа в Newman CLI.
+
+Запуск при обычном доступе на порту 80:
 
 ```bash
-kubectl scale statefulset users-db-postgresql -n yahu --replicas=0
-sleep 30
-kubectl scale statefulset users-db-postgresql -n yahu --replicas=1
-kubectl rollout status statefulset users-db-postgresql -n yahu --timeout=120s
+newman run homework-k8s/postman/auth-bff.postman_collection.json \
+  --reporters cli \
+  --verbose
 ```
 
-| Запрос | HTTP | Уровень / event |
-|---|---|---|
-| `POST /user/` валидный | 201 | INFO `user_created` |
-| `GET /user/{id}` | 200 | INFO `user_retrieved` |
-| `PUT /user/{id}` | 200 | INFO `user_updated` |
-| `DELETE /user/{id}` | 200 | INFO `user_deleted` |
-| `POST /user/` кривой email | 400 | WARN `validation_failed` |
-| `GET /user/not-a-number` | 400 | WARN `validation_failed` |
-| `GET /health/ready` без БД | 503 | ERROR `database_readiness_check_failed` |
-
-## Диагностика
+Запуск через локальный port-forward `8081`:
 
 ```bash
-kubectl logs -n yahu -l app=fluent-bit --tail=30            # не должно быть "failed to flush"
-kubectl exec -n yahu elasticsearch-0 -- curl -s "http://localhost:9200/_cat/indices/fluent-bit-logs-*?v"
-kubectl exec -n yahu elasticsearch-0 -- curl -s "http://localhost:9200/_cluster/health?pretty"
+newman run homework-k8s/postman/auth-bff.postman_collection.json \
+  --env-var baseUrl=http://arch.homework:8081 \
+  --reporters cli \
+  --verbose
 ```
 
-`kubectl` → `TLS handshake timeout` = Minikube упёрся в память, пересоздать:
-`minikube delete && minikube start --memory=8192 --cpus=4`.
+Ожидаемый результат:
 
-## Скриншоты
+```text
+requests:   11, failed: 0
+assertions: 11, failed: 0
+```
 
-`logging/screenshots/` — 01 Data View, 02 Discover с фильтром по уровню (ERROR/WARN),
-03 гистограмма по уровням, 04 логи Job миграции.
+## Безопасность
+
+- пароли хэшируются `scrypt` и никогда не передаются в Profile Service;
+- session token генерируется криптографически стойким генератором;
+- в БД хранится только SHA-256 session token;
+- cookie устанавливается с `HttpOnly` и `SameSite=Lax`;
+- доступ к профилю разрешается только при совпадении session `userId` с URL;
+- контейнеры Auth+BFF запускаются с UID/GID `1000`, без Linux capabilities;
+- Profile Service не имеет публичного Ingress.
+
+Для учебного HTTP-домена установлено `COOKIE_SECURE=false`. При использовании TLS
+необходимо установить `COOKIE_SECURE=true`.
