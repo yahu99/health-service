@@ -3,39 +3,64 @@
 Безопасный сценарий регистрации, входа, чтения и изменения пользовательского
 профиля. Namespace установки — **`yahu`**.
 
-![Архитектура Auth BFF](docs/bff.jpg)
+![Архитектура Auth Service и BFF](docs/bff.png)
 
 ## Архитектура
 
-Публичной точкой входа является NGINX Ingress с доменом `arch.homework`. Все
-запросы направляются в Auth+BFF. Существующий Profile Service остаётся внутренним
-`ClusterIP` и не публикуется через Ingress.
+Auth Service и BFF развёртываются как разные приложения. Публичной точкой входа
+является NGINX Ingress, который выполняет роль API Gateway.
 
 | Компонент | Ответственность |
 |---|---|
-| NGINX Ingress | публичная маршрутизация `arch.homework` в Auth+BFF |
-| Auth+BFF | регистрация, login/logout, сессии, авторизация и вызовы Profile Service |
+| NGINX Ingress | маршрутизация и `forward-auth` для `/profile/*` |
+| Auth Service | credentials, login/logout, создание и проверка серверных сессий |
+| BFF | публичное API, регистрация, проверка владельца и вызовы внутренних сервисов |
 | Profile Service | создание, чтение и изменение профилей |
-| PostgreSQL | `users`, `auth_credentials`, `auth_sessions` |
+| PostgreSQL | таблицы профилей, `auth_credentials` и `auth_sessions` |
+
+Auth Service и Profile Service не вызывают друг друга. BFF оркестрирует
+пользовательские сценарии и знает адреса обоих внутренних сервисов.
 
 ### Регистрация
 
-1. Клиент вызывает `POST /auth/register`.
-2. Auth+BFF хэширует пароль с помощью `scrypt` и уникальной соли.
-3. Auth+BFF создаёт профиль через внутренний `POST /user` Profile Service.
-4. Полученный `userId` связывается с credentials.
-5. Если credentials сохранить не удалось, BFF выполняет компенсирующий внутренний
-   `DELETE /user/{userId}`.
+1. Клиент вызывает `POST /auth/register` через API Gateway.
+2. BFF создаёт профиль во внутреннем Profile Service.
+3. BFF передаёт `userId`, username и пароль во внутренний Auth Service.
+4. Auth Service хэширует пароль с помощью `scrypt` и сохраняет credentials.
+5. Если credentials сохранить не удалось, BFF компенсирует операцию, удаляя
+   созданный профиль.
 
-### Сессия и доступ к профилю
+### Login и сессия
 
-После login клиент получает случайный session token в cookie с флагами `HttpOnly`
-и `SameSite=Lax`. В базе хранится только SHA-256 token. BFF получает `userId` из
-сессии и сравнивает его с `userId` профиля:
+1. BFF передаёт login-запрос во внутренний Auth Service.
+2. Auth Service проверяет пароль и создаёт случайный session token.
+3. В PostgreSQL сохраняется только SHA-256 хэш token.
+4. Cookie `session_id` с флагами `HttpOnly` и `SameSite=Lax` возвращается клиенту
+   через BFF и API Gateway.
 
-- нет cookie, сессия неизвестна или истекла — `401 Unauthorized`;
-- пользователь запрашивает чужой профиль — `403 Forbidden`;
-- владелец профиля — запрос передаётся во внутренний Profile Service.
+JWT не используется: решение построено на серверных сессиях в PostgreSQL.
+
+### Forward-auth и профиль
+
+Для `GET/PUT /profile/{userId}` NGINX Ingress сначала выполняет внутренний запрос:
+
+```text
+GET http://health-auth-service.yahu.svc.cluster.local/auth/verify
+```
+
+Auth Service получает исходную cookie и отвечает:
+
+- `401`, если сессия отсутствует, неизвестна или истекла;
+- `200` и `X-User-Id`, если сессия действительна.
+
+После успешной проверки Gateway передаёт исходный запрос в BFF и перезаписывает
+`X-User-Id` значением из Auth Service. BFF сравнивает его с `userId` в URL:
+
+- разные идентификаторы — `403 Forbidden`;
+- идентификаторы совпадают — запрос передаётся в Profile Service.
+
+Таким образом, новые защищённые маршруты можно подключать к тому же Auth Service
+через `forward-auth`, не добавляя в каждый сервис работу с сессиями.
 
 ## Публичное API
 
@@ -46,10 +71,11 @@
 | `POST` | `/auth/logout` | отзыв сессии и очистка cookie |
 | `GET` | `/profile/{userId}` | чтение собственного профиля |
 | `PUT` | `/profile/{userId}` | изменение собственного профиля |
-| `GET` | `/health/live` | liveness probe Auth+BFF |
-| `GET` | `/health/ready` | проверка БД и Profile Service |
+| `GET` | `/health/live` | liveness probe BFF |
+| `GET` | `/health/ready` | готовность BFF и внутренних сервисов |
 
-Внутренние маршруты `/user/*` Profile Service через Ingress недоступны.
+Внутренние API Auth Service и маршруты `/user/*` Profile Service через Ingress
+недоступны.
 
 ## Требования
 
@@ -64,25 +90,29 @@ minikube start --memory=8192 --cpus=4
 kubectl config use-context minikube
 ```
 
-## Сборка Auth+BFF
-
-Готовые манифесты используют `yahurt/health-auth-bff:1.0.0`:
+## Сборка образов
 
 ```bash
 docker build \
-  -t yahurt/health-auth-bff:1.0.0 \
-  homework-k8s/auth-bff
+  -t yahurt/health-auth-service:1.0.0 \
+  homework-k8s/auth-service
+
+docker build \
+  -t yahurt/health-bff:1.0.0 \
+  homework-k8s/bff
 ```
 
 Для удалённого Kubernetes:
 
 ```bash
-docker push yahurt/health-auth-bff:1.0.0
+docker push yahurt/health-auth-service:1.0.0
+docker push yahurt/health-bff:1.0.0
 ```
 
 ## Установка NGINX Ingress
 
-Отдельный API Gateway не используется: его роль выполняет `ingress-nginx`.
+Отдельное приложение API Gateway не требуется: его роль выполняет
+`ingress-nginx`.
 
 ```bash
 kubectl create namespace yahu --dry-run=client -o yaml | kubectl apply -f -
@@ -100,7 +130,7 @@ helm upgrade --install nginx-ingress ingress-nginx \
 репозитория `health-service`.
 
 ```bash
-# Namespace и credentials существующего PostgreSQL
+# Namespace и credentials PostgreSQL
 kubectl create namespace yahu --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f homework-k8s/k8s/secret.yaml
 
@@ -112,46 +142,58 @@ helm upgrade --install users-db \
   --values homework-k8s/helm/postgresql/values.yaml \
   --wait
 
-# Profile Service: конфигурация и миграция
+# Profile Service
 kubectl apply -f homework-k8s/k8s/configmap.yaml
 kubectl delete job health-service-migration -n yahu --ignore-not-found
 kubectl apply -f homework-k8s/k8s/migration-job.yaml
 kubectl wait --for=condition=complete \
   job/health-service-migration -n yahu --timeout=180s
-
-# Profile Service без публичного Ingress
 kubectl apply \
   -f homework-k8s/k8s/deployment.yaml \
   -f homework-k8s/k8s/service.yaml
-kubectl rollout status \
-  deployment/health-service -n yahu --timeout=180s
 
-# Auth+BFF: конфигурация и миграция в тот же PostgreSQL
-kubectl apply -f homework-k8s/k8s/auth-bff-configmap.yaml
-kubectl delete job health-auth-bff-migration -n yahu --ignore-not-found
-kubectl apply -f homework-k8s/k8s/auth-bff-migration-job.yaml
+# Auth Service: конфигурация, миграция, Deployment и Service
+kubectl apply -f homework-k8s/k8s/auth-service-configmap.yaml
+kubectl delete job health-auth-service-migration -n yahu --ignore-not-found
+kubectl apply -f homework-k8s/k8s/auth-service-migration-job.yaml
 kubectl wait --for=condition=complete \
-  job/health-auth-bff-migration -n yahu --timeout=180s
-
-# Auth+BFF и публичный Ingress
+  job/health-auth-service-migration -n yahu --timeout=180s
 kubectl apply \
-  -f homework-k8s/k8s/auth-bff-deployment.yaml \
-  -f homework-k8s/k8s/auth-bff-service.yaml \
+  -f homework-k8s/k8s/auth-service-deployment.yaml \
+  -f homework-k8s/k8s/auth-service-service.yaml
+
+# BFF и два Ingress-маршрута: публичный и защищённый
+kubectl apply \
+  -f homework-k8s/k8s/bff-configmap.yaml \
+  -f homework-k8s/k8s/bff-deployment.yaml \
+  -f homework-k8s/k8s/bff-service.yaml \
   -f homework-k8s/k8s/ingress.yaml
-kubectl rollout status \
-  deployment/health-auth-bff -n yahu --timeout=180s
+
+kubectl rollout status deployment/health-service -n yahu --timeout=180s
+kubectl rollout status deployment/health-auth-service -n yahu --timeout=180s
+kubectl rollout status deployment/health-bff -n yahu --timeout=180s
+```
+
+Если выполняется обновление ранее установленной объединённой версии, после запуска
+новых компонентов старые ресурсы можно удалить:
+
+```bash
+kubectl delete deployment health-auth-bff -n yahu --ignore-not-found
+kubectl delete service health-auth-bff -n yahu --ignore-not-found
+kubectl delete configmap health-auth-bff-config -n yahu --ignore-not-found
+kubectl delete job health-auth-bff-migration -n yahu --ignore-not-found
 ```
 
 Проверка:
 
 ```bash
 kubectl get pods,services,ingress,jobs -n yahu
-kubectl logs job/health-auth-bff-migration -n yahu
+kubectl logs job/health-auth-service-migration -n yahu
 ```
 
 ### Локальный доступ к Ingress в Minikube
 
-Для Minikube с Docker driver на macOS удобно перенаправить порт Ingress Controller:
+Для Minikube с Docker driver на macOS:
 
 ```bash
 kubectl port-forward \
@@ -166,7 +208,7 @@ kubectl port-forward \
 127.0.0.1 arch.homework
 ```
 
-Проверка маршрута:
+Проверка:
 
 ```bash
 curl http://arch.homework:8081/health/ready
@@ -186,19 +228,9 @@ curl http://arch.homework:8081/health/ready
 6. регистрирует и авторизует пользователя №2;
 7. проверяет запрет чтения и изменения профиля №1 пользователем №2 (`403`).
 
-Начальное значение `{{baseUrl}}` в коллекции — `http://arch.homework`. При каждом
-запуске генерируется новый UUID. Collection-level scripts печатают метод, URL, тело
-запроса, HTTP-статус и тело ответа в Newman CLI.
-
-Запуск при обычном доступе на порту 80:
-
-```bash
-newman run homework-k8s/postman/auth-bff.postman_collection.json \
-  --reporters cli \
-  --verbose
-```
-
-Запуск через локальный port-forward `8081`:
+Начальное значение `{{baseUrl}}` — `http://arch.homework`. При каждом запуске
+создаются случайные данные. Скрипты коллекции печатают метод, URL и тело запроса,
+а также HTTP-статус и тело ответа в Newman CLI.
 
 ```bash
 newman run homework-k8s/postman/auth-bff.postman_collection.json \
@@ -213,16 +245,3 @@ newman run homework-k8s/postman/auth-bff.postman_collection.json \
 requests:   11, failed: 0
 assertions: 11, failed: 0
 ```
-
-## Безопасность
-
-- пароли хэшируются `scrypt` и никогда не передаются в Profile Service;
-- session token генерируется криптографически стойким генератором;
-- в БД хранится только SHA-256 session token;
-- cookie устанавливается с `HttpOnly` и `SameSite=Lax`;
-- доступ к профилю разрешается только при совпадении session `userId` с URL;
-- контейнеры Auth+BFF запускаются с UID/GID `1000`, без Linux capabilities;
-- Profile Service не имеет публичного Ingress.
-
-Для учебного HTTP-домена установлено `COOKIE_SECURE=false`. При использовании TLS
-необходимо установить `COOKIE_SECURE=true`.

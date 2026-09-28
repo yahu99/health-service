@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-bff-config
+  namespace: yahu
+  labels:
+    app: health-bff
+data:
+  PORT: "8001"
+  SERVICE_NAME: "health-bff"
+  LOG_LEVEL: "info"
+  TRUST_PROXY: "true"
+
+  AUTH_SERVICE_URL: "http://health-auth-service"
+  AUTH_SERVICE_TIMEOUT_MS: "3000"
+  PROFILE_SERVICE_URL: "http://health-service"
+  PROFILE_SERVICE_TIMEOUT_MS: "3000"

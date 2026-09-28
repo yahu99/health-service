@@ -1,8 +1,8 @@
 {
   "info": {
     "_postman_id": "4fbeb025-a580-4673-9ab8-44630f0e830e",
-    "name": "Authentication and BFF",
-    "description": "Authentication, profile update and profile ownership scenario.",
+    "name": "Auth Service, forward-auth and BFF",
+    "description": "Authentication through a separate Auth Service, profile update and profile ownership scenario.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [

@@ -1,0 +1,23 @@
+{
+  "name": "health-bff",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backend for Frontend for the health application",
+  "license": "ISC",
+  "engines": {
+    "node": ">=20"
+  },
+  "type": "commonjs",
+  "main": "src/index.js",
+  "scripts": {
+    "check": "node --check src/*.js src/middleware/*.js src/routes/*.js src/services/*.js",
+    "start": "node src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@koa/bodyparser": "6.0.0",
+    "@koa/router": "15.6.0",
+    "koa": "3.2.1",
+    "pino": "10.3.1"
+  }
+}

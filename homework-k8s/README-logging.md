@@ -30,7 +30,7 @@ kubectl delete job health-service-migration -n yahu --ignore-not-found
 kubectl apply -f homework-k8s/k8s/migration-job.yaml
 kubectl wait --for=condition=complete job/health-service-migration -n yahu --timeout=180s
 
-# 4. Profile Service (текущий публичный Ingress ведёт в Auth+BFF)
+# 4. Profile Service (текущий публичный Ingress ведёт в BFF)
 kubectl apply -f homework-k8s/k8s/deployment.yaml -f homework-k8s/k8s/service.yaml
 kubectl rollout status deployment/health-service -n yahu --timeout=180s
 
