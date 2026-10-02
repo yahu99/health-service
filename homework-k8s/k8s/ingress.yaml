@@ -9,10 +9,40 @@ spec:
     - host: arch.homework
       http:
         paths:
-          - path: /
+          - path: /auth
             pathType: Prefix
             backend:
               service:
-                name: health-service
+                name: health-bff
+                port:
+                  number: 80
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: health-bff
+                port:
+                  number: 80
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: health-service-profile
+  namespace: yahu
+  annotations:
+    nginx.ingress.kubernetes.io/auth-method: GET
+    nginx.ingress.kubernetes.io/auth-response-headers: X-User-Id
+    nginx.ingress.kubernetes.io/auth-url: http://health-auth-service.yahu.svc.cluster.local/auth/verify
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: arch.homework
+      http:
+        paths:
+          - path: /profile
+            pathType: Prefix
+            backend:
+              service:
+                name: health-bff
                 port:
                   number: 80
