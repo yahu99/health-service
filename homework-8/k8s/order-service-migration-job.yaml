@@ -1,0 +1,38 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: health-order-service-migration
+  namespace: yahu
+  labels:
+    app: health-order-service
+    component: migration
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels:
+        app: health-order-service
+        component: migration
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migration
+          image: yahurt/health-order-service:1.0.0
+          command:
+            - npm
+            - run
+            - migrate
+          envFrom:
+            - configMapRef:
+                name: health-order-service-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: users-db-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: users-db-credentials
+                  key: password

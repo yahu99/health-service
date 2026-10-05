@@ -4,6 +4,7 @@ const logger = require("./logger");
 const authRouter = require("./routes/auth");
 const healthRouter = require("./routes/health");
 const profileRouter = require("./routes/profile");
+const commerceRouter = require("./routes/commerce");
 
 const app = new Koa();
 app.proxy = process.env.TRUST_PROXY === "true";
@@ -33,7 +34,7 @@ app.use(async (ctx, next) => {
         await next();
     } catch (error) {
         ctx.status = error.status || 500;
-        ctx.body = {
+        ctx.body = error.apiCode ? { code: error.apiCode } : {
             code: ctx.status,
             message: ctx.status === 500 ? "Internal server error" : error.message,
         };
@@ -57,7 +58,7 @@ app.use(async (ctx, next) => {
 
 app.use(bodyParser({ enableTypes: ["json"], jsonLimit: "64kb" }));
 
-for (const router of [healthRouter, authRouter, profileRouter]) {
+for (const router of [healthRouter, authRouter, profileRouter, commerceRouter]) {
     app.use(router.routes());
     app.use(router.allowedMethods());
 }

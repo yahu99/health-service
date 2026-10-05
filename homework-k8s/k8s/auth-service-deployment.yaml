@@ -15,22 +15,12 @@ spec:
       labels:
         app: health-auth-service
     spec:
-      automountServiceAccountToken: false
-      enableServiceLinks: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seccompProfile:
-          type: RuntimeDefault
       containers:
         - name: health-auth-service
           image: yahurt/health-auth-service:1.0.0
-          imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8002
-              protocol: TCP
           envFrom:
             - configMapRef:
                 name: health-auth-service-config
@@ -50,9 +40,7 @@ spec:
               path: /health/live
               port: http
             initialDelaySeconds: 10
-            periodSeconds: 10
             timeoutSeconds: 2
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -60,17 +48,3 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-            readOnlyRootFilesystem: true
-          resources:
-            requests:
-              cpu: 50m
-              memory: 96Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
-      terminationGracePeriodSeconds: 15

@@ -10,7 +10,7 @@
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
-    "check": "node --check src/*.js src/middleware/*.js src/routes/*.js src/services/*.js",
+    "check": "node --check src/app.js && node --check src/config.js && node --check src/index.js && node --check src/logger.js && node --check src/middleware/gateway-identity.js && node --check src/middleware/require-profile-owner.js && node --check src/routes/auth.js && node --check src/routes/commerce.js && node --check src/routes/health.js && node --check src/routes/profile.js && node --check src/services/auth-client.js && node --check src/services/commerce-client.js && node --check src/services/http-client.js && node --check src/services/profile-client.js && node --check src/validation.js",
     "start": "node src/index.js",
     "test": "node --test"
   },

@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: health-notification-service
+  namespace: yahu
+  labels:
+    app: health-notification-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: health-notification-service
+  template:
+    metadata:
+      labels:
+        app: health-notification-service
+    spec:
+      containers:
+        - name: health-notification-service
+          image: yahurt/health-notification-service:1.0.0
+          ports:
+            - name: http
+              containerPort: 8005
+          envFrom:
+            - configMapRef:
+                name: health-notification-service-config
+          env:
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: users-db-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: users-db-credentials
+                  key: password
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http
+            initialDelaySeconds: 10
+            timeoutSeconds: 2
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
