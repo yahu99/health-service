@@ -15,22 +15,12 @@ spec:
       labels:
         app: health-bff
     spec:
-      automountServiceAccountToken: false
-      enableServiceLinks: false
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seccompProfile:
-          type: RuntimeDefault
       containers:
         - name: health-bff
-          image: yahurt/health-bff:1.0.0
-          imagePullPolicy: IfNotPresent
+          image: yahurt/health-bff:2.0.0
           ports:
             - name: http
               containerPort: 8001
-              protocol: TCP
           envFrom:
             - configMapRef:
                 name: health-bff-config
@@ -39,9 +29,7 @@ spec:
               path: /health/live
               port: http
             initialDelaySeconds: 10
-            periodSeconds: 10
             timeoutSeconds: 2
-            failureThreshold: 3
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -49,17 +37,3 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
-            failureThreshold: 3
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-            readOnlyRootFilesystem: true
-          resources:
-            requests:
-              cpu: 50m
-              memory: 96Mi
-            limits:
-              cpu: 500m
-              memory: 256Mi
-      terminationGracePeriodSeconds: 15

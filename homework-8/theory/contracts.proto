@@ -1,0 +1,139 @@
+syntax = "proto3";
+package homework.orders;
+
+// HTTP/JSON; методы и ответы — в contracts.md.
+// ID > 0; price/amount > 0; balance >= 0.
+
+service PublicAPI {
+  // POST /auth/register
+  rpc Register(RegisterRequest) returns (User);
+  // POST /auth/login
+  rpc Login(LoginRequest) returns (Session);
+  // GET /billing/account
+  rpc GetMyAccount(Empty) returns (Account);
+  // POST /billing/deposits
+  rpc Deposit(PublicDepositRequest) returns (DepositResponse);
+  // POST /orders
+  rpc CreateOrder(PublicOrderRequest) returns (CreateOrderResponse);
+  // GET /orders/{orderId}
+  rpc GetOrder(OrderId) returns (Order);
+  // GET /notifications?orderId=...
+  rpc GetNotifications(NotificationFilter) returns (NotificationList);
+}
+
+service ProfileService {
+  // POST /user
+  rpc CreateUser(ProfileRequest) returns (User);
+  // GET /user/{userId}
+  rpc GetUser(UserId) returns (User);
+}
+
+service AuthService {
+  // POST /internal/credentials
+  rpc CreateCredentials(CredentialsRequest) returns (CredentialsResponse);
+}
+
+service BillingService {
+  // POST /internal/accounts
+  rpc CreateAccount(UserId) returns (Account);
+  // GET /internal/accounts/by-user/{userId}
+  rpc GetAccount(UserId) returns (Account);
+  // POST /internal/deposits
+  rpc Deposit(DepositRequest) returns (DepositResponse);
+  // POST /internal/withdrawals
+  rpc Withdraw(WithdrawRequest) returns (WithdrawResponse);
+}
+
+service OrderService {
+  // POST /internal/orders
+  rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
+  // GET /internal/orders/{orderId}?userId=...
+  rpc GetOrder(GetOrderRequest) returns (Order);
+}
+
+service NotificationService {
+  // POST /internal/notifications
+  rpc CreateNotification(CreateNotificationRequest) returns (NotificationId);
+  // GET /internal/notifications?userId=...&orderId=...
+  rpc GetNotifications(GetNotificationsRequest) returns (NotificationList);
+}
+
+message Empty {  }
+message UserId { int64 userId = 1; }
+message OrderId { int64 orderId = 1; }
+message RegisterRequest {
+  string username = 1;
+  string password = 2;
+  string firstName = 3;
+  string lastName = 4;
+  string email = 5;
+  optional string phone = 6;
+}
+message ProfileRequest {
+  string username = 1;
+  string firstName = 2;
+  string lastName = 3;
+  string email = 4;
+  optional string phone = 5;
+}
+message User {
+  int64 id = 1;
+  string username = 2;
+  string firstName = 3;
+  string lastName = 4;
+  string email = 5;
+  optional string phone = 6;
+}
+message LoginRequest { string username = 1; string password = 2; }
+message Session { int64 userId = 1; string expiresAt = 2; }
+message CredentialsRequest { int64 userId = 1; string username = 2; string password = 3; }
+message CredentialsResponse { int64 userId = 1; string username = 2; }
+message Account { int64 accountId = 1; int64 userId = 2; int64 balance = 3; }
+message PublicDepositRequest { int64 amount = 1; }
+message DepositRequest { int64 userId = 1; int64 amount = 2; }
+message DepositResponse { int64 operationId = 1; int64 balance = 2; }
+message WithdrawRequest { int64 userId = 1; int64 orderId = 2; int64 amount = 3; }
+message WithdrawResponse { int64 withdrawalId = 1; int64 balance = 2; }
+message PublicOrderRequest { int64 price = 1; }
+message CreateOrderRequest { int64 userId = 1; string email = 2; int64 price = 3; }
+message CreateOrderResponse { int64 orderId = 1; string status = 2; optional string reason = 3; }
+message GetOrderRequest { int64 orderId = 1; int64 userId = 2; }
+message Order { int64 orderId = 1; int64 price = 2; string status = 3; optional string reason = 4; }
+message NotificationFilter { optional int64 orderId = 1; }
+message GetNotificationsRequest { int64 userId = 1; optional int64 orderId = 2; }
+message CreateNotificationRequest {
+  int64 userId = 1;
+  int64 orderId = 2;
+  string email = 3;
+  int64 amount = 4;
+  string result = 5;
+  optional string reason = 6;
+}
+message NotificationId { int64 notificationId = 1; }
+message Notification { int64 orderId = 1; string email = 2; string result = 3; string body = 4; }
+message NotificationList { repeated Notification items = 1; }
+message ApiError { string code = 1; }
+// События для двух теоретических вариантов.
+message OrderCreated { int64 orderId = 1; int64 userId = 2; int64 amount = 3; string email = 4; }
+message PaymentSucceeded {
+  int64 orderId = 1;
+  int64 userId = 2;
+  int64 amount = 3;
+  string email = 4;
+  int64 withdrawalId = 5;
+}
+message PaymentFailed {
+  int64 orderId = 1;
+  int64 userId = 2;
+  int64 amount = 3;
+  string email = 4;
+  string reason = 5;
+}
+message OrderPaid { int64 orderId = 1; int64 userId = 2; int64 amount = 3; string email = 4; }
+message OrderRejected {
+  int64 orderId = 1;
+  int64 userId = 2;
+  int64 amount = 3;
+  string email = 4;
+  string reason = 5;
+}

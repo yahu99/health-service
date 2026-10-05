@@ -15,6 +15,10 @@ function positiveIntegerEnvironmentVariable(name, defaultValue) {
 
 module.exports = {
     port: positiveIntegerEnvironmentVariable("PORT", 8001),
+    billingServiceUrl: (process.env.BILLING_SERVICE_URL || "http://health-billing-service").replace(/\/$/, ""),
+    orderServiceUrl: (process.env.ORDER_SERVICE_URL || "http://health-order-service").replace(/\/$/, ""),
+    notificationServiceUrl: (process.env.NOTIFICATION_SERVICE_URL || "http://health-notification-service").replace(/\/$/, ""),
+    commerceTimeoutMs: positiveIntegerEnvironmentVariable("COMMERCE_TIMEOUT_MS", 15000),
     authServiceUrl: (process.env.AUTH_SERVICE_URL || "http://health-auth-service")
         .replace(/\/$/, ""),
     authServiceTimeoutMs: positiveIntegerEnvironmentVariable(

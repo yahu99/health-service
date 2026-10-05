@@ -2,6 +2,7 @@ const Router = require("@koa/router");
 const logger = require("../logger");
 const authClient = require("../services/auth-client");
 const profileClient = require("../services/profile-client");
+const commerceClient = require("../services/commerce-client");
 const { objectBody, requiredString } = require("../validation");
 
 const router = new Router({ prefix: "/auth" });
@@ -60,6 +61,8 @@ router.post("/register", async (ctx) => {
 
         throw error;
     }
+
+    await commerceClient.createAccount(user.id);
 
     ctx.status = 201;
     ctx.set("Location", `/profile/${user.id}`);

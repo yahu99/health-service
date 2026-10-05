@@ -1,7 +1,8 @@
 # Аутентификация и BFF
 
-Безопасный сценарий регистрации, входа, чтения и изменения пользовательского
-профиля. Namespace установки — **`yahu`**.
+Регистрация, вход, чтение и изменение пользовательского профиля.
+Общий BFF также обслуживает Billing, Order и Notification из
+[homework-8](../homework-8/README.md). Namespace установки — **`yahu`**.
 
 ![Архитектура Auth Service и BFF](docs/bff.png)
 
@@ -27,7 +28,8 @@ Auth Service и Profile Service не вызывают друг друга. BFF �
 2. BFF создаёт профиль во внутреннем Profile Service.
 3. BFF передаёт `userId`, username и пароль во внутренний Auth Service.
 4. Auth Service хэширует пароль с помощью `scrypt` и сохраняет credentials.
-5. Если credentials сохранить не удалось, BFF компенсирует операцию, удаляя
+5. BFF создаёт billing-аккаунт для пользователя.
+6. Если credentials сохранить не удалось, BFF компенсирует операцию, удаляя
    созданный профиль.
 
 ### Login и сессия
@@ -98,7 +100,7 @@ docker build \
   homework-k8s/auth-service
 
 docker build \
-  -t yahurt/health-bff:1.0.0 \
+  -t yahurt/health-bff:2.0.0 \
   homework-k8s/bff
 ```
 
@@ -106,7 +108,7 @@ docker build \
 
 ```bash
 docker push yahurt/health-auth-service:1.0.0
-docker push yahurt/health-bff:1.0.0
+docker push yahurt/health-bff:2.0.0
 ```
 
 ## Установка NGINX Ingress
@@ -124,72 +126,44 @@ helm upgrade --install nginx-ingress ingress-nginx \
   --wait
 ```
 
-## Установка приложения
+## Установка базовых сервисов
 
-Все компоненты устанавливаются в namespace `yahu`. Команды выполняются из корня
-репозитория `health-service`.
+Команды выполняются из корня репозитория. Namespace — `yahu`.
+NGINX Ingress устанавливается командой из раздела выше.
+Если PostgreSQL, Profile и Auth уже работают, переходите к
+[установке новых сервисов и BFF](../homework-8/README.md#установка-в-kubernetes).
 
 ```bash
-# Namespace и credentials PostgreSQL
 kubectl create namespace yahu --dry-run=client -o yaml | kubectl apply -f -
 kubectl apply -f homework-k8s/k8s/secret.yaml
 
-# PostgreSQL
 helm upgrade --install users-db \
   oci://registry-1.docker.io/bitnamicharts/postgresql \
-  --version 18.8.0 \
-  --namespace yahu \
-  --values homework-k8s/helm/postgresql/values.yaml \
-  --wait
+  --version 18.8.0 --namespace yahu \
+  --values homework-k8s/helm/postgresql/values.yaml --wait
 
-# Profile Service
-kubectl apply -f homework-k8s/k8s/configmap.yaml
-kubectl delete job health-service-migration -n yahu --ignore-not-found
-kubectl apply -f homework-k8s/k8s/migration-job.yaml
-kubectl wait --for=condition=complete \
-  job/health-service-migration -n yahu --timeout=180s
-kubectl apply \
+kubectl apply -n yahu \
+  -f homework-k8s/k8s/configmap.yaml \
+  -f homework-k8s/k8s/auth-service-configmap.yaml
+
+kubectl delete job -n yahu --ignore-not-found \
+  health-service-migration health-auth-service-migration
+kubectl apply -n yahu \
+  -f homework-k8s/k8s/migration-job.yaml \
+  -f homework-k8s/k8s/auth-service-migration-job.yaml
+kubectl wait -n yahu --for=condition=complete --timeout=180s \
+  job/health-service-migration job/health-auth-service-migration
+
+kubectl apply -n yahu \
+  -f homework-k8s/k8s/service.yaml \
+  -f homework-k8s/k8s/auth-service-service.yaml \
   -f homework-k8s/k8s/deployment.yaml \
-  -f homework-k8s/k8s/service.yaml
-
-# Auth Service: конфигурация, миграция, Deployment и Service
-kubectl apply -f homework-k8s/k8s/auth-service-configmap.yaml
-kubectl delete job health-auth-service-migration -n yahu --ignore-not-found
-kubectl apply -f homework-k8s/k8s/auth-service-migration-job.yaml
-kubectl wait --for=condition=complete \
-  job/health-auth-service-migration -n yahu --timeout=180s
-kubectl apply \
-  -f homework-k8s/k8s/auth-service-deployment.yaml \
-  -f homework-k8s/k8s/auth-service-service.yaml
-
-# BFF и два Ingress-маршрута: публичный и защищённый
-kubectl apply \
-  -f homework-k8s/k8s/bff-configmap.yaml \
-  -f homework-k8s/k8s/bff-deployment.yaml \
-  -f homework-k8s/k8s/bff-service.yaml \
-  -f homework-k8s/k8s/ingress.yaml
-
+  -f homework-k8s/k8s/auth-service-deployment.yaml
 kubectl rollout status deployment/health-service -n yahu --timeout=180s
 kubectl rollout status deployment/health-auth-service -n yahu --timeout=180s
-kubectl rollout status deployment/health-bff -n yahu --timeout=180s
 ```
 
-Если выполняется обновление ранее установленной объединённой версии, после запуска
-новых компонентов старые ресурсы можно удалить:
-
-```bash
-kubectl delete deployment health-auth-bff -n yahu --ignore-not-found
-kubectl delete service health-auth-bff -n yahu --ignore-not-found
-kubectl delete configmap health-auth-bff-config -n yahu --ignore-not-found
-kubectl delete job health-auth-bff-migration -n yahu --ignore-not-found
-```
-
-Проверка:
-
-```bash
-kubectl get pods,services,ingress,jobs -n yahu
-kubectl logs job/health-auth-service-migration -n yahu
-```
+Далее выполните [команды установки Billing, Order, Notification и BFF](../homework-8/README.md#установка-в-kubernetes).
 
 ### Локальный доступ к Ingress в Minikube
 

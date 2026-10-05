@@ -1,0 +1,533 @@
+{
+  "info": {
+    "_postman_id": "e68b7107-27c9-4149-bcd7-8c93f6d89592",
+    "name": "Stream Processing — заказы, биллинг, уведомления",
+    "description": "Сценарий домашнего задания через публичное API. Каждый запуск создаёт нового пользователя. Суммы — целые минимальные единицы валюты.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (pm.info.requestName === '01 — Создать пользователя') {",
+          "    const runId = pm.variables.replaceIn('{{$randomUUID}}');",
+          "    pm.collectionVariables.set('username', `orders-${runId}`);",
+          "    pm.collectionVariables.set('password', `Homework!-${runId}`);",
+          "    pm.collectionVariables.set('email', `orders-${runId}@example.com`);",
+          "    ['userId', 'accountId', 'paidOrderId', 'rejectedOrderId'].forEach(key => pm.collectionVariables.set(key, ''));",
+          "}",
+          "console.log(`>>> REQUEST ${pm.request.method} ${pm.variables.replaceIn(pm.request.url.toString())}`);",
+          "console.log(`>>> REQUEST BODY ${pm.request.body && pm.request.body.mode === 'raw' ? pm.variables.replaceIn(pm.request.body.raw) : '<empty>'}`);"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "console.log(`<<< RESPONSE ${pm.response.code} ${pm.response.status}`);",
+          "console.log(`<<< RESPONSE BODY ${pm.response.text() || '<empty>'}`);"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 — Создать пользователя",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Пользователь создан', () => {",
+              "    pm.response.to.have.status(201);",
+              "    const user = pm.response.json();",
+              "    pm.expect(Number.isSafeInteger(user.id) && user.id > 0).to.eql(true);",
+              "    pm.expect(user.username).to.eql(pm.collectionVariables.get('username'));",
+              "    pm.expect(user.email).to.eql(pm.collectionVariables.get('email'));",
+              "    pm.expect(user).not.to.have.property('password');",
+              "    pm.collectionVariables.set('userId', user.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/register",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "register"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\",\n  \"firstName\": \"Test\",\n  \"lastName\": \"Orders\",\n  \"email\": \"{{email}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02 — Войти",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Сессия создана для нового пользователя', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const session = pm.response.json();",
+              "    pm.expect(session.userId).to.eql(Number(pm.collectionVariables.get('userId')));",
+              "    pm.expect(Date.parse(session.expiresAt)).to.be.above(Date.now());",
+              "    pm.expect(pm.response.headers.get('Set-Cookie')).to.include('session_id=');",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/auth/login",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "auth",
+            "login"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"username\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03 — Проверить создание billing-аккаунта",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Аккаунт создан автоматически, баланс равен нулю', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const account = pm.response.json();",
+              "    pm.expect(Number.isSafeInteger(account.accountId) && account.accountId > 0).to.eql(true);",
+              "    pm.expect(account.userId).to.eql(Number(pm.collectionVariables.get('userId')));",
+              "    pm.expect(account.balance).to.eql(0);",
+              "    pm.collectionVariables.set('accountId', account.accountId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/account",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "account"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "04 — Пополнить счёт",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Пополнение изменило баланс на переданную сумму', () => {",
+              "    pm.response.to.have.status(201);",
+              "    const operation = pm.response.json();",
+              "    pm.expect(Number.isSafeInteger(operation.operationId) && operation.operationId > 0).to.eql(true);",
+              "    pm.expect(operation.balance).to.eql(Number(pm.collectionVariables.get('depositAmount')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/billing/deposits",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "deposits"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amount\": {{depositAmount}}\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "05 — Сделать заказ, на который хватает денег",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Заказ оплачен, причина отказа отсутствует', () => {",
+              "    pm.response.to.have.status(201);",
+              "    const order = pm.response.json();",
+              "    pm.expect(Number.isSafeInteger(order.orderId) && order.orderId > 0).to.eql(true);",
+              "    pm.expect(order.status).to.eql('PAID');",
+              "    pm.expect(order.reason).to.eql(null);",
+              "    pm.collectionVariables.set('paidOrderId', order.orderId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "orders"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"price\": {{paidPrice}}\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "06 — Проверить баланс после оплаты",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Стоимость успешного заказа списана с нужного аккаунта', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const account = pm.response.json();",
+              "    pm.expect(account.accountId).to.eql(Number(pm.collectionVariables.get('accountId')));",
+              "    pm.expect(account.userId).to.eql(Number(pm.collectionVariables.get('userId')));",
+              "    pm.expect(account.balance).to.eql(Number(pm.collectionVariables.get('depositAmount')) - Number(pm.collectionVariables.get('paidPrice')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/account",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "account"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "07 — Проверить уведомление об успешном заказе",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Сохранено одно успешное уведомление на email пользователя', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const items = pm.response.json().items;",
+              "    pm.expect(items).to.be.an('array').with.lengthOf(1);",
+              "    pm.expect(items[0].orderId).to.eql(Number(pm.collectionVariables.get('paidOrderId')));",
+              "    pm.expect(items[0].email).to.eql(pm.collectionVariables.get('email'));",
+              "    pm.expect(items[0].result).to.eql('PAID');",
+              "    pm.expect(items[0].body).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/notifications?orderId={{paidOrderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "orderId",
+              "value": "{{paidOrderId}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "08 — Сделать заказ, на который не хватает денег",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Создан отклонённый заказ с причиной INSUFFICIENT_FUNDS', () => {",
+              "    pm.response.to.have.status(201);",
+              "    const order = pm.response.json();",
+              "    pm.expect(Number.isSafeInteger(order.orderId) && order.orderId > 0).to.eql(true);",
+              "    pm.expect(order.orderId).not.to.eql(Number(pm.collectionVariables.get('paidOrderId')));",
+              "    pm.expect(order.status).to.eql('REJECTED');",
+              "    pm.expect(order.reason).to.eql('INSUFFICIENT_FUNDS');",
+              "    pm.collectionVariables.set('rejectedOrderId', order.orderId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/orders",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "orders"
+          ]
+        },
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"price\": {{rejectedPrice}}\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "09 — Проверить баланс после отказа",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('После отклонённого заказа баланс не изменился', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const account = pm.response.json();",
+              "    pm.expect(account.accountId).to.eql(Number(pm.collectionVariables.get('accountId')));",
+              "    pm.expect(account.userId).to.eql(Number(pm.collectionVariables.get('userId')));",
+              "    pm.expect(account.balance).to.eql(Number(pm.collectionVariables.get('depositAmount')) - Number(pm.collectionVariables.get('paidPrice')));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/billing/account",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "billing",
+            "account"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "10 — Проверить уведомление об отклонённом заказе",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Сохранено одно уведомление об отказе на email пользователя', () => {",
+              "    pm.response.to.have.status(200);",
+              "    const items = pm.response.json().items;",
+              "    pm.expect(items).to.be.an('array').with.lengthOf(1);",
+              "    pm.expect(items[0].orderId).to.eql(Number(pm.collectionVariables.get('rejectedOrderId')));",
+              "    pm.expect(items[0].email).to.eql(pm.collectionVariables.get('email'));",
+              "    pm.expect(items[0].result).to.eql('REJECTED');",
+              "    pm.expect(items[0].body).to.be.a('string').and.not.empty;",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/notifications?orderId={{rejectedOrderId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "notifications"
+          ],
+          "query": [
+            {
+              "key": "orderId",
+              "value": "{{rejectedOrderId}}"
+            }
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://arch.homework",
+      "type": "string"
+    },
+    {
+      "key": "depositAmount",
+      "value": "10000",
+      "type": "string"
+    },
+    {
+      "key": "paidPrice",
+      "value": "3000",
+      "type": "string"
+    },
+    {
+      "key": "rejectedPrice",
+      "value": "8000",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accountId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paidOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "rejectedOrderId",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

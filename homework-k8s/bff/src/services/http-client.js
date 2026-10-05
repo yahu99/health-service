@@ -1,7 +1,8 @@
-function upstreamError(status, message) {
+function upstreamError(status, message, apiCode) {
     const error = new Error(message);
     error.status = status;
     error.expose = status < 500;
+    error.apiCode = apiCode;
     return error;
 }
 
@@ -44,6 +45,7 @@ async function request(baseUrl, path, options = {}) {
             throw upstreamError(
                 response.status,
                 body?.message || `${options.serviceName} rejected the request`,
+                typeof body?.code === "string" ? body.code : undefined,
             );
         }
 

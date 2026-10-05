@@ -15,17 +15,13 @@ spec:
         component: migration
     spec:
       restartPolicy: Never
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        seccompProfile:
-          type: RuntimeDefault
       containers:
         - name: migration
           image: yahurt/health-auth-service:1.0.0
-          imagePullPolicy: IfNotPresent
-          command: ["npm", "run", "migrate"]
+          command:
+            - npm
+            - run
+            - migrate
           envFrom:
             - configMapRef:
                 name: health-auth-service-config
@@ -40,14 +36,3 @@ spec:
                 secretKeyRef:
                   name: users-db-credentials
                   key: password
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          resources:
-            requests:
-              cpu: 25m
-              memory: 64Mi
-            limits:
-              cpu: 250m
-              memory: 192Mi
