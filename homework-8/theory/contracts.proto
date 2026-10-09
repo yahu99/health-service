@@ -5,6 +5,10 @@ package homework.orders;
 // ID > 0; price/amount > 0; balance >= 0.
 
 service PublicAPI {
+  // GET /delivery/slots
+  rpc GetDeliverySlots(Empty) returns (DeliverySlotList);
+  // GET /products
+  rpc GetProducts(Empty) returns (ProductList);
   // POST /auth/register
   rpc Register(RegisterRequest) returns (User);
   // POST /auth/login
@@ -13,7 +17,7 @@ service PublicAPI {
   rpc GetMyAccount(Empty) returns (Account);
   // POST /billing/deposits
   rpc Deposit(PublicDepositRequest) returns (DepositResponse);
-  // POST /orders
+  // POST /orders; Idempotency-Key header required; 202 pending, 200 completed replay
   rpc CreateOrder(PublicOrderRequest) returns (CreateOrderResponse);
   // GET /orders/{orderId}
   rpc GetOrder(OrderId) returns (Order);
@@ -41,10 +45,16 @@ service BillingService {
   // POST /internal/deposits
   rpc Deposit(DepositRequest) returns (DepositResponse);
   // POST /internal/withdrawals
-  rpc Withdraw(WithdrawRequest) returns (WithdrawResponse);
+  rpc Withdraw(WithdrawRequest) returns (BillingOperation);
+  // POST /internal/refunds
+  rpc Refund(OrderId) returns (BillingOperation);
+  // GET /internal/operations/{orderId}
+  rpc GetOperation(OrderId) returns (BillingOperation);
 }
 
 service OrderService {
+  // GET /internal/products
+  rpc GetProducts(Empty) returns (ProductList);
   // POST /internal/orders
   rpc CreateOrder(CreateOrderRequest) returns (CreateOrderResponse);
   // GET /internal/orders/{orderId}?userId=...
@@ -93,12 +103,17 @@ message PublicDepositRequest { int64 amount = 1; }
 message DepositRequest { int64 userId = 1; int64 amount = 2; }
 message DepositResponse { int64 operationId = 1; int64 balance = 2; }
 message WithdrawRequest { int64 userId = 1; int64 orderId = 2; int64 amount = 3; }
-message WithdrawResponse { int64 withdrawalId = 1; int64 balance = 2; }
-message PublicOrderRequest { int64 price = 1; }
-message CreateOrderRequest { int64 userId = 1; string email = 2; int64 price = 3; }
-message CreateOrderResponse { int64 orderId = 1; string status = 2; optional string reason = 3; }
+message BillingOperation { int64 orderId = 1; int64 userId = 2; int64 amount = 3; string status = 4; optional string reason = 5; optional int64 withdrawalId = 6; optional int64 refundId = 7; optional int64 balance = 8; }
+message DeliverySlot { int64 deliverySlotId = 1; string startsAt = 2; string endsAt = 3; int64 availableCouriers = 4; }
+message DeliverySlotList { repeated DeliverySlot items = 1; }
+message SagaStep { string step = 1; string status = 2; int32 attempts = 3; optional string lastError = 4; }
+message Product { int64 productId = 1; string name = 2; int64 unitPrice = 3; }
+message ProductList { repeated Product items = 1; }
+message PublicOrderRequest { reserved 1; reserved "price"; int64 productId = 2; optional int64 quantity = 3; int64 deliverySlotId = 4; }
+message CreateOrderRequest { int64 userId = 1; string email = 2; reserved 3; reserved "price"; int64 productId = 4; optional int64 quantity = 5; int64 deliverySlotId = 6; }
+message CreateOrderResponse { int64 orderId = 1; string status = 2; optional string reason = 3; int64 productId = 4; int64 quantity = 5; int64 unitPrice = 6; int64 price = 7; int64 deliverySlotId = 8; }
 message GetOrderRequest { int64 orderId = 1; int64 userId = 2; }
-message Order { int64 orderId = 1; int64 price = 2; string status = 3; optional string reason = 4; }
+message Order { int64 orderId = 1; int64 price = 2; string status = 3; optional string reason = 4; optional int64 productId = 5; optional int64 quantity = 6; optional int64 unitPrice = 7; optional int64 deliverySlotId = 8; repeated SagaStep steps = 9; }
 message NotificationFilter { optional int64 orderId = 1; }
 message GetNotificationsRequest { int64 userId = 1; optional int64 orderId = 2; }
 message CreateNotificationRequest {

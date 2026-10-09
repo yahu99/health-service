@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-warehouse-service
+  namespace: yahu
+  labels:
+    app: health-warehouse-service
+spec:
+  selector:
+    app: health-warehouse-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+  type: ClusterIP

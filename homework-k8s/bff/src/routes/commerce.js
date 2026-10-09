@@ -30,12 +30,37 @@ router.post("/billing/deposits", gatewayIdentity, async (ctx) => {
     ctx.status = 201;
 });
 
+router.get("/products", gatewayIdentity, async (ctx) => {
+    ctx.body = await commerce.getProducts();
+});
+
+router.get("/products/:productId/stock", gatewayIdentity, async (ctx) => {
+    const productId = pathInteger(ctx, ctx.params.productId);
+    ctx.body = await commerce.getStock(productId);
+});
+
+router.get("/delivery/slots", gatewayIdentity, async (ctx) => {
+    ctx.body = await commerce.getDeliverySlots();
+});
+
 router.post("/orders", gatewayIdentity, async (ctx) => {
-    const price = positiveInteger(ctx, objectBody(ctx).price);
+    const body = objectBody(ctx);
+    if (Object.keys(body).some((key) => !["productId", "quantity", "deliverySlotId"].includes(key))) positiveInteger(ctx, null);
+    const productId = positiveInteger(ctx, body.productId);
+    const quantity = positiveInteger(ctx, body.quantity === undefined ? 1 : body.quantity);
+    const deliverySlotId = positiveInteger(ctx, body.deliverySlotId);
+    const idempotencyKey = ctx.get("Idempotency-Key");
+    if (!/^[A-Za-z0-9._:-]{1,128}$/.test(idempotencyKey)) {
+        const error = new Error("Invalid Idempotency-Key");
+        error.status = 400;
+        error.apiCode = "INVALID_IDEMPOTENCY_KEY";
+        throw error;
+    }
     const userId = ctx.state.auth.userId;
     const user = await profile.getProfile(userId);
-    ctx.body = await commerce.createOrder(userId, user.email, price);
-    ctx.status = 201;
+    const response = await commerce.createOrder(userId, user.email, productId, quantity, deliverySlotId, idempotencyKey);
+    ctx.body = response.body;
+    ctx.status = response.status;
 });
 
 router.get("/orders/:orderId", gatewayIdentity, async (ctx) => {
