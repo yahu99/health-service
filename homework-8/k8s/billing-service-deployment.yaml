@@ -17,7 +17,8 @@ spec:
     spec:
       containers:
         - name: health-billing-service
-          image: yahurt/health-billing-service:1.0.0
+          image: yahurt/health-billing-service:2.0.0
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8003

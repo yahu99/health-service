@@ -55,6 +55,22 @@ spec:
                 port:
                   number: 80
 
+          - path: /products
+            pathType: Prefix
+            backend:
+              service:
+                name: health-bff
+                port:
+                  number: 80
+
+          - path: /delivery/slots
+            pathType: Exact
+            backend:
+              service:
+                name: health-bff
+                port:
+                  number: 80
+
           - path: /orders
             pathType: Prefix
             backend:

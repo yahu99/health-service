@@ -18,5 +18,7 @@ data:
 
   BILLING_SERVICE_URL: "http://health-billing-service"
   ORDER_SERVICE_URL: "http://health-order-service"
+  WAREHOUSE_SERVICE_URL: "http://health-warehouse-service"
+  DELIVERY_SERVICE_URL: "http://health-delivery-service"
   NOTIFICATION_SERVICE_URL: "http://health-notification-service"
   COMMERCE_TIMEOUT_MS: "15000"

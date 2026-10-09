@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "e68b7107-27c9-4149-bcd7-8c93f6d89592",
     "name": "Stream Processing — заказы, биллинг, уведомления",
-    "description": "Сценарий домашнего задания через публичное API. Каждый запуск создаёт нового пользователя. Суммы — целые минимальные единицы валюты.",
+    "description": "Сценарий домашнего задания через публичное API. Каждый запуск создаёт нового пользователя. Суммы — целые минимальные единицы валюты. Каталог из миграции: товар 1 стоит 1000; заказы на 3 и 8 единиц.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "event": [
@@ -230,6 +230,10 @@
               "pm.test('Заказ оплачен, причина отказа отсутствует', () => {",
               "    pm.response.to.have.status(201);",
               "    const order = pm.response.json();",
+              "    pm.expect(order.productId).to.eql(1);",
+              "    pm.expect(order.quantity).to.eql(3);",
+              "    pm.expect(order.unitPrice).to.eql(1000);",
+              "    pm.expect(order.price).to.eql(3000);",
               "    pm.expect(Number.isSafeInteger(order.orderId) && order.orderId > 0).to.eql(true);",
               "    pm.expect(order.status).to.eql('PAID');",
               "    pm.expect(order.reason).to.eql(null);",
@@ -258,7 +262,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"price\": {{paidPrice}}\n}",
+          "raw": "{\n  \"productId\": 1,\n  \"quantity\": 3\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -356,6 +360,10 @@
               "pm.test('Создан отклонённый заказ с причиной INSUFFICIENT_FUNDS', () => {",
               "    pm.response.to.have.status(201);",
               "    const order = pm.response.json();",
+              "    pm.expect(order.productId).to.eql(1);",
+              "    pm.expect(order.quantity).to.eql(8);",
+              "    pm.expect(order.unitPrice).to.eql(1000);",
+              "    pm.expect(order.price).to.eql(8000);",
               "    pm.expect(Number.isSafeInteger(order.orderId) && order.orderId > 0).to.eql(true);",
               "    pm.expect(order.orderId).not.to.eql(Number(pm.collectionVariables.get('paidOrderId')));",
               "    pm.expect(order.status).to.eql('REJECTED');",
@@ -385,7 +393,7 @@
         },
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"price\": {{rejectedPrice}}\n}",
+          "raw": "{\n  \"productId\": 1,\n  \"quantity\": 8\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -487,11 +495,6 @@
     {
       "key": "paidPrice",
       "value": "3000",
-      "type": "string"
-    },
-    {
-      "key": "rejectedPrice",
-      "value": "8000",
       "type": "string"
     },
     {

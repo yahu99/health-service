@@ -2,6 +2,8 @@ const app = require("./app");
 const config = require("./config");
 const { pool } = require("./db");
 const logger = require("./logger");
+const { startWorker } = require("./saga");
+const stopWorker = startWorker();
 
 const server = app.listen(config.port, () => {
     logger.info(
@@ -42,6 +44,7 @@ function shutdown(signal) {
         }
 
         try {
+            await stopWorker();
             await pool.end();
         } finally {
             clearTimeout(forceExitTimer);
