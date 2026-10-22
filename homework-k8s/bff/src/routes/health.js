@@ -2,6 +2,7 @@ const Router = require("@koa/router");
 const logger = require("../logger");
 const authClient = require("../services/auth-client");
 const profileClient = require("../services/profile-client");
+const commerceClient = require("../services/commerce-client");
 
 const router = new Router({ prefix: "/health" });
 
@@ -11,7 +12,7 @@ router.get("/live", (ctx) => {
 
 router.get("/ready", async (ctx) => {
     try {
-        await Promise.all([authClient.readiness(), profileClient.readiness()]);
+        await Promise.all([authClient.readiness(), profileClient.readiness(), commerceClient.readiness()]);
         ctx.body = { status: "OK" };
     } catch (error) {
         logger.error(

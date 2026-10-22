@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-notification-service
+  namespace: yahu
+  labels:
+    app: health-notification-service
+spec:
+  selector:
+    app: health-notification-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+  type: ClusterIP

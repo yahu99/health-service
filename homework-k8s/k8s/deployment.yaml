@@ -5,7 +5,6 @@ metadata:
   namespace: yahu
   labels:
     app: health-service
-
 spec:
   replicas: 2
   selector:
@@ -24,26 +23,22 @@ spec:
           envFrom:
             - configMapRef:
                 name: health-service-config
-
           env:
             - name: DB_USER
               valueFrom:
                 secretKeyRef:
                   name: users-db-credentials
                   key: username
-
             - name: DB_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: users-db-credentials
                   key: password
-
           livenessProbe:
             httpGet:
               path: /health/live
               port: 8000
             initialDelaySeconds: 10
-            periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health/ready

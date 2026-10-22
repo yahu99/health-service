@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: health-billing-service
+  namespace: yahu
+  labels:
+    app: health-billing-service
+spec:
+  selector:
+    app: health-billing-service
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: http
+  type: ClusterIP
