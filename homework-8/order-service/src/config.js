@@ -26,6 +26,11 @@ function positiveIntegerEnvironmentVariable(name, defaultValue) {
 module.exports = {
     port: positiveIntegerEnvironmentVariable("PORT", 8004),
     billingServiceUrl: process.env.BILLING_SERVICE_URL || "http://health-billing-service",
+    warehouseServiceUrl: process.env.WAREHOUSE_SERVICE_URL || "http://health-warehouse-service",
+    deliveryServiceUrl: process.env.DELIVERY_SERVICE_URL || "http://health-delivery-service",
+    sagaPollMs: positiveIntegerEnvironmentVariable("SAGA_POLL_MS", 1000),
+    sagaRetryBaseMs: positiveIntegerEnvironmentVariable("SAGA_RETRY_BASE_MS", 1000),
+    sagaRetryMaxMs: positiveIntegerEnvironmentVariable("SAGA_RETRY_MAX_MS", 30000),
     notificationServiceUrl: process.env.NOTIFICATION_SERVICE_URL || "http://health-notification-service",
     serviceTimeoutMs: positiveIntegerEnvironmentVariable("SERVICE_TIMEOUT_MS", 5000),
     database: {

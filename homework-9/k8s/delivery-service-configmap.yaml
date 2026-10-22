@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: health-delivery-service-config
+  namespace: yahu
+  labels:
+    app: health-delivery-service
+data:
+  PORT: "8007"
+  SERVICE_NAME: "health-delivery-service"
+  LOG_LEVEL: "info"
+  TRUST_PROXY: "true"
+
+
+  DB_HOST: "users-db-postgresql"
+  DB_PORT: "5432"
+  DB_NAME: "users"
+  DB_POOL_SIZE: "10"
+  DB_CONNECTION_TIMEOUT_MS: "3000"
+  DB_SSL: "false"

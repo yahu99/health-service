@@ -16,7 +16,11 @@ async function post(baseUrl, path, body) {
     let data;
     try { data = await response.json(); } catch { fail(502, "INVALID_UPSTREAM_RESPONSE"); }
     if (!response.ok) {
-        fail(response.status >= 500 ? 502 : response.status, data.code || "UPSTREAM_ERROR");
+        const error = new Error(data?.code || "UPSTREAM_ERROR");
+        error.status = response.status >= 500 ? 502 : response.status;
+        error.apiCode = data?.code || "UPSTREAM_ERROR";
+        error.details = data;
+        throw error;
     }
     return data;
 }
