@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#172a2b">
+  <meta name="description" content="Интерфейс онлайн-магазина: каталог, баланс, заказы и наблюдение за распределённой транзакцией Saga.">
+  <title>Saga Store · Панель магазина</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="#overview"><img src="/favicon.svg" width="39" height="39" alt=""><span>saga<span class="brand-light">store</span><small>МИКРОСЕРВИСНЫЙ МАГАЗИН</small></span></a>
+    <div class="workspace-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+    <nav aria-label="Главная навигация">
+      <a href="#overview" data-page="overview"><span data-icon="grid"></span>Обзор<span class="nav-arrow">↗</span></a>
+      <a href="#catalog" data-page="catalog"><span data-icon="box"></span>Каталог</a>
+      <a href="#orders" data-page="orders"><span data-icon="bag"></span>Заказы<span class="nav-count" id="order-count">0</span></a>
+      <a href="#billing" data-page="billing"><span data-icon="wallet"></span>Баланс</a>
+      <a href="#profile" data-page="profile"><span data-icon="user"></span>Профиль</a>
+    </nav>
+    <div class="workspace-label second-label">ИНСТРУМЕНТЫ</div>
+    <nav aria-label="Инструменты">
+      <a href="#requests" data-page="requests"><span data-icon="terminal"></span>Журнал запросов</a>
+    </nav>
+    <div class="sidebar-bottom"><span class="live-dot"></span><span>Дипломный проект<small>HTTP · Saga orchestration</small></span><span class="version">v1.0</span></div>
+  </aside>
+  <div class="app-shell">
+    <header class="topbar"><div class="breadcrumb">Рабочее пространство <span>/</span> <strong id="breadcrumb">Обзор</strong></div><div class="topbar-right"><button class="connection" id="connection" title="Проверить готовность API"><span class="live-dot muted"></span><span>Проверяем API</span></button><span class="top-divider"></span><button class="user-control" id="user-control"><span class="avatar" id="avatar">?</span><span id="user-label">Войти в аккаунт</span><span>⌄</span></button></div></header>
+    <main id="main"></main>
+    <footer class="footer"><span>Saga Store <span class="footer-dot">·</span> Демонстрация распределённых транзакций</span><a href="#requests">REST API <span>↗</span></a></footer>
+  </div>
+  <dialog id="auth-dialog" aria-labelledby="auth-title"><button class="dialog-close icon-button" id="close-auth" aria-label="Закрыть">×</button><div class="dialog-mark"><img src="/favicon.svg" width="42" height="42" alt=""></div><h2 id="auth-title">Добро пожаловать</h2><p class="muted-text">Войдите, чтобы работать с магазином.</p><div class="segmented"><button type="button" data-auth-mode="login" class="active">Вход</button><button type="button" data-auth-mode="register">Регистрация</button></div><form id="auth-form"><div id="auth-fields"></div><p class="form-error" id="auth-error" role="alert"></p><button type="submit" class="button primary full-width" id="auth-submit">Войти <span>→</span></button></form><p class="dialog-note">Сессия хранится в защищённой HttpOnly cookie.</p></dialog>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
