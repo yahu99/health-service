@@ -1,0 +1,617 @@
+{
+  "info": {
+    "_postman_id": "493a5ea1-4cd8-4738-a9fe-410bfce5ec51",
+    "name": "Online Store - project defense demo",
+    "description": "Compact defense scenario: registration, funding, successful order, delivery rejection with Saga compensation, and idempotency.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Register",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const runId = pm.variables.replaceIn(\"{{$randomUUID}}\");",
+              "pm.collectionVariables.set(\"username\", \"saga-\" + runId);",
+              "pm.collectionVariables.set(\"email\", \"saga-\" + runId + \"@example.com\");",
+              "pm.collectionVariables.set(\"password\", \"Homework!\" + runId);",
+              "for (const name of [\"noFunds\", \"success\", \"noStock\", \"noCourier\"])",
+              "  pm.collectionVariables.set(\"key_\" + name, runId + \"-\" + name);",
+              "for (const name of [\"pollCount_order_success\", \"pollCount_order_no_courier\"]) pm.collectionVariables.unset(name);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"User and billing account created\", () => {",
+              "  pm.response.to.have.status(201);",
+              "  const user = pm.response.json();",
+              "  pm.expect(user.id).to.be.a(\"number\");",
+              "  pm.collectionVariables.set(\"userId\", user.id);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/register",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\":\"{{username}}\",\"password\":\"{{password}}\",\"firstName\":\"Saga\",\"lastName\":\"Test\",\"email\":\"{{email}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "02 Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Session created\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().userId).to.eql(Number(pm.collectionVariables.get(\"userId\")));",
+              "  pm.expect(pm.response.headers.get(\"Set-Cookie\")).to.include(\"session_id=\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/auth/login",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"username\":\"{{username}}\",\"password\":\"{{password}}\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "03 Product catalog",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Product prices come from the server\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const items = pm.response.json().items;",
+              "  const first = items.find(p => p.productId === 1);",
+              "  const scarce = items.find(p => p.productId === 3);",
+              "  pm.expect(first).to.exist;",
+              "  pm.expect(scarce).to.exist;",
+              "  pm.expect(first.unitPrice).to.be.above(0);",
+              "  pm.expect(scarce.unitPrice).to.be.above(0);",
+              "  pm.collectionVariables.set(\"price_1\", first.unitPrice);",
+              "  pm.collectionVariables.set(\"price_3\", scarce.unitPrice);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/products"
+      },
+      "response": []
+    },
+    {
+      "name": "04 Available delivery slots",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Two distinct future free slots available\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const future = Date.now() + 60 * 60 * 1000;",
+              "  const free = pm.response.json().items.filter(s => s.availableCouriers > 0 && Date.parse(s.startsAt) > future);",
+              "  pm.expect(free.length).to.be.at.least(2);",
+              "  pm.expect(free[0].deliverySlotId).not.to.eql(free[1].deliverySlotId);",
+              "  pm.collectionVariables.set(\"slot_a\", free[0].deliverySlotId);",
+              "  pm.collectionVariables.set(\"slot_b\", free[1].deliverySlotId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/delivery/slots"
+      },
+      "response": []
+    },
+    {
+      "name": "05 Prepare stock and deposit",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Stock and deposit prepared\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const available = pm.response.json().available;",
+              "  const price = Number(pm.collectionVariables.get(\"price_1\"));",
+              "  pm.expect(available).to.be.at.least(2);",
+              "  pm.expect(price).to.be.above(0);",
+              "  pm.collectionVariables.set(\"initial_stock_1\", available);",
+              "  pm.collectionVariables.set(\"deposit_amount\", Math.max(50000, price * 4));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/products/1/stock"
+      },
+      "response": []
+    },
+    {
+      "name": "06 Deposit",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Account funded\", () => {",
+              "  pm.response.to.have.status(201);",
+              "  pm.expect(pm.response.json().balance).to.eql(Number(pm.collectionVariables.get(\"deposit_amount\")));",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/billing/deposits",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"amount\":{{deposit_amount}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "07 Create successful order",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Order accepted with server-calculated price\", () => {",
+              "  pm.response.to.have.status(202);",
+              "  const order = pm.response.json();",
+              "  pm.expect(order.orderId).to.be.a(\"number\");",
+              "  pm.expect(order.status).to.eql(\"PROCESSING\");",
+              "  pm.expect(order.price).to.eql(Number(pm.collectionVariables.get(\"price_1\")));",
+              "  pm.collectionVariables.set(\"order_success\", order.orderId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key_success}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\":1,\"quantity\":1,\"deliverySlotId\":{{slot_a}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "08 Wait for successful Saga",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 100);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.response.to.have.status(200);",
+              "const order = pm.response.json();",
+              "const count = Number(pm.collectionVariables.get(\"pollCount_order_success\") || 0) + 1;",
+              "pm.collectionVariables.set(\"pollCount_order_success\", count);",
+              "if (order.status === \"PROCESSING\" || order.status === \"COMPENSATING\") {",
+              "  if (count < 120) pm.execution.setNextRequest(pm.info.requestName);",
+              "  else pm.test(\"Saga completed within 120 polls\", () => pm.expect(order.status).to.eql(\"CONFIRMED\"));",
+              "} else {",
+              "  pm.test(\"Final order status and saga steps\", () => {",
+              "    pm.expect(order.orderId).to.eql(Number(pm.collectionVariables.get(\"order_success\")));",
+              "    pm.expect(order.status).to.eql(\"CONFIRMED\");",
+              "    pm.expect(order.reason).to.eql(null);",
+              "    const steps = Object.fromEntries(order.steps.map(s => [s.step, s.status]));",
+              "  pm.expect(steps.BILLING).to.eql(\"SUCCEEDED\");",
+              "  pm.expect(steps.WAREHOUSE).to.eql(\"SUCCEEDED\");",
+              "  pm.expect(steps.DELIVERY).to.eql(\"SUCCEEDED\");",
+              "  });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/orders/{{order_success}}"
+      },
+      "response": []
+    },
+    {
+      "name": "09 Balance after successful order",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Exactly one payment was charged\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const expected = Number(pm.collectionVariables.get(\"deposit_amount\")) - Number(pm.collectionVariables.get(\"price_1\"));",
+              "  pm.expect(pm.response.json().balance).to.eql(expected);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/billing/account"
+      },
+      "response": []
+    },
+    {
+      "name": "10 Stock after successful order",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"One item remains reserved\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().available).to.eql(Number(pm.collectionVariables.get(\"initial_stock_1\")) - 1);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/products/1/stock"
+      },
+      "response": []
+    },
+    {
+      "name": "11 Create order with occupied delivery slot",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Order accepted with server-calculated price\", () => {",
+              "  pm.response.to.have.status(202);",
+              "  const order = pm.response.json();",
+              "  pm.expect(order.orderId).to.be.a(\"number\");",
+              "  pm.expect(order.status).to.eql(\"PROCESSING\");",
+              "  pm.expect(order.price).to.eql(Number(pm.collectionVariables.get(\"price_1\")));",
+              "  pm.collectionVariables.set(\"order_no_courier\", order.orderId);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key_noCourier}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\":1,\"quantity\":1,\"deliverySlotId\":{{slot_a}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "12 Wait for compensation",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "setTimeout(() => {}, 100);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.response.to.have.status(200);",
+              "const order = pm.response.json();",
+              "const count = Number(pm.collectionVariables.get(\"pollCount_order_no_courier\") || 0) + 1;",
+              "pm.collectionVariables.set(\"pollCount_order_no_courier\", count);",
+              "if (order.status === \"PROCESSING\" || order.status === \"COMPENSATING\") {",
+              "  if (count < 120) pm.execution.setNextRequest(pm.info.requestName);",
+              "  else pm.test(\"Saga completed within 120 polls\", () => pm.expect(order.status).to.eql(\"CANCELLED\"));",
+              "} else {",
+              "  pm.test(\"Final order status and saga steps\", () => {",
+              "    pm.expect(order.orderId).to.eql(Number(pm.collectionVariables.get(\"order_no_courier\")));",
+              "    pm.expect(order.status).to.eql(\"CANCELLED\");",
+              "    pm.expect(order.reason).to.eql(\"NO_COURIER_AVAILABLE\");",
+              "    const steps = Object.fromEntries(order.steps.map(s => [s.step, s.status]));",
+              "  pm.expect(steps.BILLING).to.eql(\"COMPENSATED\");",
+              "  pm.expect(steps.WAREHOUSE).to.eql(\"COMPENSATED\");",
+              "  pm.expect(steps.DELIVERY).to.eql(\"REJECTED\");",
+              "  });",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/orders/{{order_no_courier}}"
+      },
+      "response": []
+    },
+    {
+      "name": "13 Balance restored after compensation",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Delivery failure refunded the payment\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const expected = Number(pm.collectionVariables.get(\"deposit_amount\")) - Number(pm.collectionVariables.get(\"price_1\"));",
+              "  pm.expect(pm.response.json().balance).to.eql(expected);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/billing/account"
+      },
+      "response": []
+    },
+    {
+      "name": "14 Stock restored after compensation",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Delivery failure released the product reservation\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  pm.expect(pm.response.json().available).to.eql(Number(pm.collectionVariables.get(\"initial_stock_1\")) - 1);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/products/1/stock"
+      },
+      "response": []
+    },
+    {
+      "name": "15 Replay successful order",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Same key returns the same order without charging again\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const order = pm.response.json();",
+              "  pm.expect(order.orderId).to.eql(Number(pm.collectionVariables.get(\"order_success\")));",
+              "  pm.expect(order.status).to.eql(\"CONFIRMED\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key_success}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\":1,\"quantity\":1,\"deliverySlotId\":{{slot_a}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "16 Changed replay rejected",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Same key cannot change the order\", () => {",
+              "  pm.response.to.have.status(409);",
+              "  pm.expect(pm.response.json().code).to.eql(\"IDEMPOTENCY_CONFLICT\");",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Idempotency-Key",
+            "value": "{{key_success}}"
+          }
+        ],
+        "url": "{{baseUrl}}/orders",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"productId\":1,\"quantity\":2,\"deliverySlotId\":{{slot_a}}}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "17 Final balance",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Replays caused no extra payment\", () => {",
+              "  pm.response.to.have.status(200);",
+              "  const expected = Number(pm.collectionVariables.get(\"deposit_amount\")) - Number(pm.collectionVariables.get(\"price_1\"));",
+              "  pm.expect(pm.response.json().balance).to.eql(expected);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/billing/account"
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://arch.homework",
+      "type": "string"
+    }
+  ]
+}

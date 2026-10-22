@@ -20,5 +20,10 @@ data:
   DB_SSL: "false"
 
   BILLING_SERVICE_URL: "http://health-billing-service"
+  WAREHOUSE_SERVICE_URL: "http://health-warehouse-service"
+  DELIVERY_SERVICE_URL: "http://health-delivery-service"
+  SAGA_POLL_MS: "1000"
+  SAGA_RETRY_BASE_MS: "1000"
+  SAGA_RETRY_MAX_MS: "30000"
   NOTIFICATION_SERVICE_URL: "http://health-notification-service"
   SERVICE_TIMEOUT_MS: "5000"
